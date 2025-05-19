@@ -3,11 +3,13 @@ use ndarray::Array;
 use crate::block::Block;
 
 pub struct Piece{
-    pub matrix: Array2<Block>
+    pub matrix: Array2<Block>,
+    pub x: usize,
+    pub y: usize,
 }
 
 impl Piece{
-    pub fn new(block_type: Block) -> Piece{
+    pub fn new(block_type: Block, x: usize, y: usize) -> Piece{
 
         let mut matrix = match block_type{
             Block::LightBlue => Array::<Block, _>::from_elem((4, 4).f(), Block::None),
@@ -31,6 +33,6 @@ impl Piece{
             matrix[[x,y]] = block_type;
         }
 
-        Piece {matrix}
+        Piece {matrix, x, y}
     }
 }

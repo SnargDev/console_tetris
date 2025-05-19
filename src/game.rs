@@ -7,20 +7,23 @@ use std::thread::sleep;
 
 
     pub fn run(){
-        let p = Piece::new(Block::Green);
-        println!("{:?}", p.matrix);
+
+        //option because there should be an update inbetween placing a piece and spawning the next one
+        //because otherwise the player could maybe hard drop onto blocks that are being cleared that turn
+        let mut piece = Some(Piece::new(Block::Green, 5, 30));
+        //println!("{:?}", piece.unwrap().matrix);
 
         let size_x = 10;
         let size_y = 40;
-        let mut a = Array::<Block, _>::from_elem((size_y, size_x).f(), Block::Red);
-        a[[0,5]] = Block::LightBlue;
-
+        let mut a = Array::<Block, _>::from_elem((size_y, size_x).f(), Block::None);
+        
+        /*a[[0,5]] = Block::LightBlue;
 
         let mut idx = 0;
         for b in Block::VALUES{
             a[[0,idx]] = b;
             idx += 1;
-        }
+        }*/
 
 
 
@@ -29,9 +32,10 @@ use std::thread::sleep;
         let mut last_frame = Instant::now();
 
         loop {
-            
+            /*
             let mut new_screen = Array::<Block, _>::from_elem((size_y, size_x).f(), Block::None);
 
+            
             //i want to revert this but cant
             for (i, b) in a.iter().enumerate(){
                 
@@ -43,12 +47,60 @@ use std::thread::sleep;
                 }
             }
 
-            a = new_screen;
+            a = new_screen;*/
 
 
             //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
             print!("{}[2J", 27 as char);
 
+            //gravity
+            if let Some(ref mut p) = piece{
+                println!("printing piece, y: {}", p.y);
+
+                p.y += 1;
+
+                //this whole part is stupid and needs to be fixed
+                //the math is all wrong
+
+                let (matrix_x, matrix_y) = p.matrix.dim();
+                let max_x = size_x - matrix_x;
+                let max_y = size_y - matrix_y;
+
+                //TODO seperate movement and gravity
+                //are all blocks inside the playing field?
+
+                //true -> render it that way
+                //false -> decrement y, add piece to matrix
+
+                
+
+                let dropped = !p.matrix.iter().enumerate().all(|(i, b)| *b == Block::None || {
+
+                    //println!("{} + {} % {}", p.x, i, size_x);
+
+                    let x = i % matrix_x;
+                    println!("{}", x);
+                    println!("{}", i);
+                    let y = p.y + (i - x)/matrix_x;
+
+                    let x = x + p.x;
+
+
+                    y <= max_y && x <= max_x
+                });
+
+                if dropped{
+                    println!("dropped piece");
+
+                    p.y -= 1;
+                    for (i, b) in p.matrix.iter().enumerate(){
+                        let x = i % size_x;
+                        let y = (i - x)/size_x;
+                        a[[y,x]] = *b;
+                    }
+                    piece = None;
+                }
+            }
 
             //print screen
             let mut out = String::from("");
@@ -60,6 +112,17 @@ use std::thread::sleep;
             }
             println!("{}", out);
 
+            if let Some(ref p) = piece{
+                for y in 0..p.matrix.dim().0{
+                    for x in 0..p.matrix.dim().1{
+                        if p.matrix[[y,x]] != Block::None{
+
+                            assert_ne!(a[[y+p.y,x+p.x]], Block::None);
+                            a[[y+p.y,x+p.x]] = Block::None;
+                        } 
+                    }
+                }
+            }
 
             let time = Instant::now();
             if let Some(sleep_for) = frame_time.checked_sub(time.duration_since(last_frame)){

@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Block {
     LightBlue,
     DarkBlue,
@@ -41,6 +41,6 @@ impl Block{
         ];
 
         let c = colors[*self as usize];
-        format!("{}", Colorize::truecolor("[]", c.0, c.1, c.2))
+        format!("{}", Colorize::truecolor(if *self == Block::None {"  "} else {"[]"}, c.0, c.1, c.2))
     }
 }
