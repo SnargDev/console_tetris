@@ -62,9 +62,9 @@ use std::thread::sleep;
                 //this whole part is stupid and needs to be fixed
                 //the math is all wrong
 
-                let (matrix_x, matrix_y) = p.matrix.dim();
-                let max_x = size_x - matrix_x;
-                let max_y = size_y - matrix_y;
+                let (matrix_x, _) = p.matrix.dim();
+                let max_x = size_x - 1;//matrix_x;
+                let max_y = size_y - 1;//matrix_y;
 
                 //TODO seperate movement and gravity
                 //are all blocks inside the playing field?
@@ -76,28 +76,26 @@ use std::thread::sleep;
 
                 let dropped = !p.matrix.iter().enumerate().all(|(i, b)| *b == Block::None || {
 
-                    //println!("{} + {} % {}", p.x, i, size_x);
-
                     let x = i % matrix_x;
-                    println!("{}", x);
-                    println!("{}", i);
                     let y = p.y + (i - x)/matrix_x;
-
                     let x = x + p.x;
-
 
                     y <= max_y && x <= max_x
                 });
 
                 if dropped{
                     println!("dropped piece");
-
                     p.y -= 1;
-                    for (i, b) in p.matrix.iter().enumerate(){
-                        let x = i % size_x;
-                        let y = (i - x)/size_x;
-                        a[[y,x]] = *b;
-                    }
+                }
+
+                //put piece on the matrix
+                for (i, b) in p.matrix.iter().enumerate().filter(|(_, b)| **b != Block::None){
+                    let x = i % size_x;
+                    let y = (i - x)/size_x;
+                    a[[y + p.y, x + p.x]] = *b;
+                }
+
+                if dropped{
                     piece = None;
                 }
             }
@@ -113,12 +111,15 @@ use std::thread::sleep;
             println!("{}", out);
 
             if let Some(ref p) = piece{
-                for y in 0..p.matrix.dim().0{
-                    for x in 0..p.matrix.dim().1{
+
+                let (sy, sx) = p.matrix.dim();
+
+                for y in 0..sy{
+                    for x in 0..sx{
                         if p.matrix[[y,x]] != Block::None{
 
-                            assert_ne!(a[[y+p.y,x+p.x]], Block::None);
-                            a[[y+p.y,x+p.x]] = Block::None;
+                            assert_ne!(a[[y + p.y, x+ p.x]], Block::None);
+                            a[[y + p.y, x + p.x]] = Block::None;
                         } 
                     }
                 }
