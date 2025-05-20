@@ -63,6 +63,7 @@ use std::thread::sleep;
                 //the math is all wrong
 
                 let (matrix_x, _) = p.matrix.dim();
+                //the code in the closure can be made better by using non-constant values here
                 let max_x = size_x - 1;//matrix_x;
                 let max_y = size_y - 1;//matrix_y;
 
@@ -72,15 +73,15 @@ use std::thread::sleep;
                 //true -> render it that way
                 //false -> decrement y, add piece to matrix
 
-                
 
+                //could use aniter().enumerate().any here but eh
                 let dropped = !p.matrix.iter().enumerate().all(|(i, b)| *b == Block::None || {
 
                     let x = i % matrix_x;
                     let y = p.y + (i - x)/matrix_x;
                     let x = x + p.x;
 
-                    y <= max_y && x <= max_x
+                    y <= max_y && x <= max_x && a[[y,x]] == Block::None
                 });
 
                 if dropped{
@@ -90,8 +91,9 @@ use std::thread::sleep;
 
                 //put piece on the matrix
                 for (i, b) in p.matrix.iter().enumerate().filter(|(_, b)| **b != Block::None){
-                    let x = i % size_x;
-                    let y = (i - x)/size_x;
+                    let x = i % matrix_x;
+                    let y = (i - x)/matrix_x;
+
                     a[[y + p.y, x + p.x]] = *b;
                 }
 
