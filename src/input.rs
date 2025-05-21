@@ -54,26 +54,6 @@ pub fn activate(tx: Sender<InputPackage>){
         let now = Instant::now();
         let mut package = InputPackage{move_x: 0};
 
-        /*for key in keys.iter()
-        {
-            if !last_pressed.contains_key(key){
-                continue;
-            }
-
-            if now.duration_since(last_pressed[key]) < COOLDOWN{
-                return;
-            }
-
-            //unwrap is safe here because of filter
-            match InputData::from_keycode(*key).unwrap(){
-                Left => package.move_x = -1,
-                Right => package.move_x = 1
-            }
-
-
-            tx.send(package.clone()).expect("should have been able to send cloned package");
-        }*/
-
         for key in keys.iter().filter(|kc| { 
                         let res = last_pressed.contains_key(kc) && now.duration_since(last_pressed[kc]) > COOLDOWN; 
                         if res { last_pressed.insert(**kc, now); } 
@@ -88,15 +68,6 @@ pub fn activate(tx: Sender<InputPackage>){
 
 
             tx.send(package.clone()).expect("should have been able to send cloned package");
-
-            /*if let Some(data) = match key {
-                Keycode::Left | Keycode::A => Some(Left),
-                Keycode::Right => Some(Right),
-                _ => None
-            }{
-                tx.send(data);
-            }*/
-            //tx.send(key.to_string()).expect("should have been able to send keycode data")
         }
     }
 }

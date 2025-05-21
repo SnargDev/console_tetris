@@ -32,7 +32,7 @@ impl Block{
         match self {
             LightBlue => Colorize::cyan("[]"),
             DarkBlue => Colorize::blue("[]"),
-            Orange => Colorize::yellow("[]"),//Colorize::truecolor("[]", 255, 165, 0),//140, 100, 0),
+            Orange => Colorize::yellow("[]"),
             Yellow => Colorize::truecolor("[]", 255, 210, 0),
             Green => Colorize::green("[]"),
             Red => Colorize::red("[]"),

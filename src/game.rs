@@ -41,11 +41,6 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
         //gravity
         if let Some(ref mut p) = piece{
 
-            //let mut vec = vec![];
-            //for item in rx.try_iter(){
-            //    vec.push(item);
-            //}
-
             if let Some(package) = rx.try_iter().collect::<Vec<input::InputPackage>>().last(){
                 p.x += package.move_x;
 
@@ -54,32 +49,15 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
                 }
             }
 
-            /*
-            for s in rx.try_iter(){
-                use input::InputData::*;
-                match s {
-                    Left => p.x -= 1,
-                    Right => p.x += 1
-                }
-            }*/
 
             p.y += 1;
 
 
             let (_, matrix_x) = p.matrix.dim();
 
-            //TODO seperate movement and gravity
-            //are all blocks inside the playing field?
 
             //could use iter().enumerate().any here but eh
-            let dropped = !is_piece_valid(p, &field);/* !p.matrix.iter().enumerate().all(|(i, b)| *b == Block::None || {
-
-                let x = i % matrix_x;
-                let y = p.y + ((i - x)/matrix_x) as i16;
-                let x = x as i16 + p.x;
-
-                y <= max_y as i16 && x <= max_x as i16 && x > 0 && a[[y as usize, x as usize]] == Block::None
-            });*/
+            let dropped = !is_piece_valid(p, &field);
 
             if dropped{
                 println!("dropped piece");
@@ -91,7 +69,6 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
                 let x = i % matrix_x;
                 let y = (i - x)/matrix_x;
 
-                //out of bounds error here when moving piece to the right
                 field[[y + p.y as usize, x + p.x as usize]] = *b;
             }
 
