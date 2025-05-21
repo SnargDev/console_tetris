@@ -21,7 +21,7 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
 
     let size_x = 10;
     let size_y = 40;
-    let mut a = Array::<Block, _>::from_elem((size_y, size_x).f(), Block::None);
+    let mut field = Array::<Block, _>::from_elem((size_y, size_x).f(), Block::None);
     
     /*a[[0,5]] = Block::LightBlue;
 
@@ -48,6 +48,10 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
 
             if let Some(package) = rx.try_iter().collect::<Vec<input::InputPackage>>().last(){
                 p.x += package.move_x;
+
+                if !is_piece_valid(p, &field){
+                    p.x -= package.move_x;
+                }
             }
 
             /*
@@ -62,23 +66,20 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
             p.y += 1;
 
 
-            let (matrix_x, _) = p.matrix.dim();
-            //the code in the closure can be made better by using non-constant values here
-            let max_x = size_x - 1;//matrix_x;
-            let max_y = size_y - 1;//matrix_y;
+            let (_, matrix_x) = p.matrix.dim();
 
             //TODO seperate movement and gravity
             //are all blocks inside the playing field?
 
             //could use iter().enumerate().any here but eh
-            let dropped = !p.matrix.iter().enumerate().all(|(i, b)| *b == Block::None || {
+            let dropped = !is_piece_valid(p, &field);/* !p.matrix.iter().enumerate().all(|(i, b)| *b == Block::None || {
 
                 let x = i % matrix_x;
                 let y = p.y + ((i - x)/matrix_x) as i16;
                 let x = x as i16 + p.x;
 
                 y <= max_y as i16 && x <= max_x as i16 && x > 0 && a[[y as usize, x as usize]] == Block::None
-            });
+            });*/
 
             if dropped{
                 println!("dropped piece");
@@ -90,7 +91,8 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
                 let x = i % matrix_x;
                 let y = (i - x)/matrix_x;
 
-                a[[y + p.y as usize, x + p.x as usize]] = *b;
+                //out of bounds error here when moving piece to the right
+                field[[y + p.y as usize, x + p.x as usize]] = *b;
             }
 
             if dropped{
@@ -101,7 +103,7 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
         //print screen
         // *2 because every block takes up 2 chars
         let mut out = String::with_capacity(size_x * size_y * 2);
-        for (i, b) in a.iter().enumerate(){
+        for (i, b) in field.iter().enumerate(){
             out += &b.get_string_rep();
             if (i+1) % 10 == 0{
                 out += "\n";
@@ -121,8 +123,8 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
                 for x in 0..sx{
                     if p.matrix[[y,x]] != Block::None{
 
-                        assert_ne!(a[[y + p.y as usize, x+ p.x as usize]], Block::None);
-                        a[[y + p.y as usize, x + p.x as usize]] = Block::None;
+                        assert_ne!(field[[y + p.y as usize, x+ p.x as usize]], Block::None);
+                        field[[y + p.y as usize, x + p.x as usize]] = Block::None;
                     } 
                 }
             }
@@ -141,4 +143,23 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
 
         last_frame = Instant::now();
     }
+}
+
+use ndarray::OwnedRepr;
+fn is_piece_valid(piece: &Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>) -> bool{
+    let (_, matrix_x) = piece.matrix.dim();
+
+
+    let(my, mx) = field.dim();
+    let max_x = mx-1;
+    let max_y = my-1;
+
+    piece.matrix.iter().enumerate().all(|(i, b)| *b == Block::None || {
+
+    let tmp = i % matrix_x;
+    let y = piece.y + ((i - tmp)/matrix_x) as i16;
+    let x = tmp as i16 + piece.x;
+
+    y <= max_y as i16 && x <= max_x as i16 && x > 0 && field[[y as usize, x as usize]] == Block::None
+    })
 }
