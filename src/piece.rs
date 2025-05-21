@@ -4,12 +4,13 @@ use crate::block::Block;
 
 pub struct Piece{
     pub matrix: Array2<Block>,
-    pub x: usize,
-    pub y: usize,
+    pub x: i16,
+    //is never negative but should be i16 for consistency
+    pub y: i16,
 }
 
 impl Piece{
-    pub fn new(block_type: Block, x: usize, y: usize) -> Piece{
+    pub fn new(block_type: Block, x: i16, y: i16) -> Piece{
 
         let mut matrix = match block_type{
             Block::LightBlue => Array::<Block, _>::from_elem((4, 4).f(), Block::None),

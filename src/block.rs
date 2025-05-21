@@ -23,24 +23,22 @@ impl std::fmt::Display for Block{
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct Color(u8, u8, u8);
-
 
 impl Block{
     pub fn get_string_rep(&self) -> String{
-        let colors = [
-            Color(50,50,180),
-            Color(0,0,255),
-            Color(128, 30, 0),
-            Color(128, 128, 0),
-            Color(0,255,0),
-            Color(255, 0, 0),
-            Color(128, 0, 128),
-            Color(0,0,0)
-        ];
+        
+        use Block::*;
+        format!("{}",
+        match self {
+            LightBlue => Colorize::cyan("[]"),
+            DarkBlue => Colorize::blue("[]"),
+            Orange => Colorize::yellow("[]"),//Colorize::truecolor("[]", 255, 165, 0),//140, 100, 0),
+            Yellow => Colorize::truecolor("[]", 255, 210, 0),
+            Green => Colorize::green("[]"),
+            Red => Colorize::red("[]"),
+            Magenta => Colorize::magenta("[]"),
 
-        let c = colors[*self as usize];
-        format!("{}", Colorize::truecolor(if *self == Block::None {"  "} else {"[]"}, c.0, c.1, c.2))
+            _ =>  Colorize::black("  ")
+        })
     }
 }
