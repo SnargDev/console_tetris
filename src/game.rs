@@ -5,9 +5,12 @@ use ndarray::Array;
 use std::time::{Duration, Instant};
 use std::thread::sleep;
 
-use crate::input;
+use crate::input::InputPackage;
+use std::sync::{Arc, Mutex};
 
-pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
+const RENDER_SIZE: usize = 4440;
+
+pub fn run(package_access: Arc<Mutex<InputPackage>>){
 
     //option because there should be an update inbetween placing a piece and spawning the next one
     //because otherwise the player could maybe hard drop onto blocks that are being cleared that turn
@@ -25,17 +28,29 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
     let mut last_frame = Instant::now();
 
     loop {
+
+        let package = 
+        {
+            let mut mutex = package_access.lock().unwrap();
+            let new_package = mutex.clone();
+            *mutex = InputPackage::new();
+
+            new_package
+        };
+
+        
+
         //gravity
         if let Some(ref mut p) = piece{
 
-            if let Some(package) = rx.try_iter().last(){
-                p.x += package.move_x;
+            
 
+            if package.move_x != 0{
+                p.x += package.move_x;
                 if !is_piece_valid(p, &field){
                     p.x -= package.move_x;
                 }
             }
-
 
             p.y += 1;
 
@@ -47,7 +62,7 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
             let dropped = !is_piece_valid(p, &field);
 
             if dropped{
-                println!("dropped piece");
+                //println!("dropped piece");
                 p.y -= 1;
             }
 
@@ -65,14 +80,18 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
         }
 
         //print screen
-        // *2 because every block takes up 2 chars
-        let mut out = String::with_capacity(size_x * size_y * 2);
+        let mut out = String::with_capacity(4440);//i just checked the size once, should probably do this mathematically
         for (i, b) in field.iter().enumerate(){
             out += &b.get_string_rep();
             if (i+1) % 10 == 0{
                 out += "\n";
             }
         }
+
+        assert_eq!(out.len(), RENDER_SIZE);
+
+        //println!("{}", out.len());
+        //return;
 
         //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
         print!("{}[2J", 27 as char);
@@ -97,7 +116,10 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
             piece = Some(Piece::new(Block::VALUES[rand::random_range(0..(Block::VALUES.len()-1))], spawn_x, spawn_y));
         }
 
+
+        
         let time = Instant::now();
+        debug_assert!(Duration::from_millis(2) > time.duration_since(last_frame), "{}", time.duration_since(last_frame).as_millis());
         if let Some(sleep_for) = frame_time.checked_sub(time.duration_since(last_frame)){
 
             if !sleep_for.is_zero() {

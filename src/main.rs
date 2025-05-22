@@ -14,16 +14,18 @@ mod input;
 
 
 use std::thread;
-use std::sync::mpsc;
+
+use std::sync::{Arc, Mutex};
 fn main() {
 
-    let (inp_t, inp_r) = mpsc::channel();
+    let package_access = Arc::new(Mutex::new(input::InputPackage::new()));
+    let clone = package_access.clone();
 
     thread::spawn(move || {
-        input::activate(inp_t)
+        input::activate(clone)
     });
 
-    game::run(inp_r);
+    game::run(package_access);
 
     //to terminate the input gathering thread instead of keeping the program in limbo forever
     std::process::exit(0);
