@@ -11,28 +11,15 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
 
     //option because there should be an update inbetween placing a piece and spawning the next one
     //because otherwise the player could maybe hard drop onto blocks that are being cleared that turn
-    
-    //println!("{:?}", piece.unwrap().matrix);
+    //also this lets me set it to none once dropped, making the rest of the loop a little simpler
+    let mut piece: Option<Piece> = None;
 
     let spawn_x = 5;
     let spawn_y = 10;
 
-    let mut piece: Option<Piece> = None;//Some(Piece::new(Block::Red, spawn_x, spawn_y));
-
     let size_x = 10;
     let size_y = 40;
     let mut field = Array::<Block, _>::from_elem((size_y, size_x).f(), Block::None);
-    
-    /*a[[0,5]] = Block::LightBlue;
-
-    let mut idx = 0;
-    for b in Block::VALUES{
-        a[[0,idx]] = b;
-        idx += 1;
-    }*/
-
-
-
 
     let frame_time = Duration::from_millis(250);
     let mut last_frame = Instant::now();

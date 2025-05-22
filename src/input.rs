@@ -3,7 +3,6 @@ use device_query::{DeviceState, DeviceQuery, Keycode};
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 
-use InputData::*;
 
 #[derive(Eq, Hash, PartialEq)]
 pub enum InputData {
@@ -11,6 +10,7 @@ pub enum InputData {
     Right
 }
 
+use InputData::*;
 impl InputData{
     pub const VALUES: [Self; 2] = [Left, Right];
 
@@ -39,6 +39,8 @@ pub struct InputPackage{
 }
 
 const COOLDOWN: Duration = Duration::from_millis(5);
+//use Keycode::*;
+//const KEYS: [Keycode; 10] = [Left, Right, Up, Space, C, LShift, RShift, Z, LControl, RControl];
 
 pub fn activate(tx: Sender<InputPackage>){
     let device_state = DeviceState::new();
@@ -67,10 +69,13 @@ pub fn activate(tx: Sender<InputPackage>){
                 continue;
             }
 
-            //unwrap is safe here because of filter
-            match InputData::from_keycode(key).unwrap(){
+            use Keycode::*;
+            //here it should probably match against a desired behavior instead of key, dont have time for that now
+            match key{
                 Left => package.move_x = -1,
-                Right => package.move_x = 1
+                Right => package.move_x = 1,
+
+                _ => panic!("should not have reached the input matching expression with an unregistered key")
             }
 
 
