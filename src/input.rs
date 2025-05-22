@@ -54,14 +54,21 @@ pub fn activate(tx: Sender<InputPackage>){
         let now = Instant::now();
         let mut package = InputPackage{move_x: 0};
 
-        for key in keys.iter().filter(|kc| { 
-                        let res = last_pressed.contains_key(kc) && now.duration_since(last_pressed[kc]) > COOLDOWN; 
-                        if res { last_pressed.insert(**kc, now); } 
-                        res })
-            {
+        //this is more readable and easier to work with than iter.filter because of the nature of the checks
+        //and ownership issues that would force me to insert the new time in the filter closure
+        for key in keys{
+            if !last_pressed.contains_key(&key){
+                continue;
+            }
+
+            let since = now.duration_since(last_pressed[&key]);
+            last_pressed.insert(key, now);
+            if since < COOLDOWN{
+                continue;
+            }
 
             //unwrap is safe here because of filter
-            match InputData::from_keycode(*key).unwrap(){
+            match InputData::from_keycode(key).unwrap(){
                 Left => package.move_x = -1,
                 Right => package.move_x = 1
             }
@@ -69,5 +76,12 @@ pub fn activate(tx: Sender<InputPackage>){
 
             tx.send(package.clone()).expect("should have been able to send cloned package");
         }
+
+        //the old closure, doesn't do exactly what it's supposed to
+        /*for key in keys.iter().filter(|kc| { 
+                        let res = last_pressed.contains_key(kc) && now.duration_since(last_pressed[kc]) > COOLDOWN; 
+                        if res { last_pressed.insert(**kc, now); } 
+                        res })
+        }*/
     }
 }

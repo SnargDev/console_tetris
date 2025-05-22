@@ -41,7 +41,7 @@ pub fn run(rx: std::sync::mpsc::Receiver<input::InputPackage>){
         //gravity
         if let Some(ref mut p) = piece{
 
-            if let Some(package) = rx.try_iter().collect::<Vec<input::InputPackage>>().last(){
+            if let Some(package) = rx.try_iter().last(){
                 p.x += package.move_x;
 
                 if !is_piece_valid(p, &field){
