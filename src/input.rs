@@ -13,7 +13,6 @@ use InputData::*;
 impl InputData{
     pub const VALUES: [Self; 2] = [Left, Right];
 
-    #[allow(unused)]
     fn from_keycode(keycode: Keycode) -> Option<InputData>{
         use Keycode::*;
         match keycode {
@@ -36,12 +35,24 @@ impl InputData{
 #[derive(Clone)]
 pub struct InputPackage{
     pub move_x: i16,
+    pub rotate: Rotation,
 }
 
 impl InputPackage{
     pub fn new() -> InputPackage{
-        InputPackage { move_x: 0 }
+        InputPackage 
+        {
+            move_x: 0,
+            rotate: Rotation::Not
+        }
     }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum Rotation {
+    Clockwise,
+    Counterclockwise,
+    Not
 }
 
 const COOLDOWN: Duration = Duration::from_millis(5);
@@ -54,8 +65,14 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
 
     let mut last_pressed: HashMap<Keycode, Instant> = HashMap::new();
     let now = Instant::now();
-    for data in InputData::VALUES{
+
+    /*for data in InputData::VALUES{
         last_pressed.insert(data.to_keycode(), now);
+    }*/
+
+    use Keycode::*;
+    for key in [Left, Right, Up, Z, LControl]{
+        last_pressed.insert(key, now);
     }
 
     loop {
@@ -79,11 +96,14 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
                 continue;
             }
 
-            use Keycode::*;
+            
             //here it should probably match against a desired behavior instead of key, dont have time for that now
             match key{
                 Left => new_package.move_x = -1,
                 Right => new_package.move_x = 1,
+                Up => new_package.rotate = Rotation::Clockwise,
+                Z => new_package.rotate = Rotation::Counterclockwise,
+                LControl => new_package.rotate = Rotation::Counterclockwise,
 
                 _ => panic!("should not have reached the input matching expression with an unregistered key")
             }
@@ -91,8 +111,6 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
 
         let mut package = package_access.lock().unwrap();
         *package = new_package;
-
-        //tx.send(new_package.clone()).expect("should have been able to send cloned package");
 
         //the old closure, doesn't do exactly what it's supposed to
         /*for key in keys.iter().filter(|kc| { 

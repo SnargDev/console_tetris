@@ -12,13 +12,13 @@ const RENDER_SIZE: usize = 4440;
 
 pub fn run(package_access: Arc<Mutex<InputPackage>>){
 
+    let spawn_x = 5;
+    let spawn_y = 10;
+
     //option because there should be an update inbetween placing a piece and spawning the next one
     //because otherwise the player could maybe hard drop onto blocks that are being cleared that turn
     //also this lets me set it to none once dropped, making the rest of the loop a little simpler
-    let mut piece: Option<Piece> = None;
-
-    let spawn_x = 5;
-    let spawn_y = 10;
+    let mut piece: Option<Piece> = Some(Piece::new(Block::LightBlue, spawn_x, spawn_y));//None;
 
     let size_x = 10;
     let size_y = 40;
@@ -43,7 +43,18 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         //gravity
         if let Some(ref mut p) = piece{
 
-            
+
+            use crate::input::Rotation;
+            if package.rotate != Rotation::Not{
+                let rotated = p.matrix_rotated(package.rotate);
+                //ideally i'd do this without clone, i think std::mem::swap/take could work
+                let old_matrix = p.matrix.clone();
+                p.matrix = rotated;
+
+                if !is_piece_valid(p, &field){
+                    p.matrix = old_matrix;
+                }
+            }
 
             if package.move_x != 0{
                 p.x += package.move_x;
@@ -55,7 +66,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
             p.y += 1;
 
 
-            let (_, matrix_x) = p.matrix.dim();
+            let matrix_x = p.matrix.dim().1;
 
 
             //could use iter().enumerate().any here but eh
@@ -80,6 +91,8 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         }
 
         //print screen
+        //i should probably manually create the color prefix. having it on every block introduces a lot of overhead, esp on empty lines.
+        //problem would then again be allocations so i'd have to go through the playing field to determine the amount of color changes.
         let mut out = String::with_capacity(4440);//i just checked the size once, should probably do this mathematically
         for (i, b) in field.iter().enumerate(){
             out += &b.get_string_rep();
