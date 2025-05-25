@@ -95,7 +95,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
             if package.hard_drop || ticks_since_grav_update >= ticks_per_grav_update{
 
                 ticks_since_grav_update = ticks_since_grav_update.checked_sub(ticks_per_grav_update).or_else(|| Some(0)).unwrap();
-                //ticks_since_grav_update -= ticks_per_grav_update;
 
                 //falling
                 let mut grav = 1;
@@ -162,8 +161,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
             }
         }
         else {
-            //let p = Piece::new(Block::VALUES[rand::random_range(0..(Block::VALUES.len()-1))], spawn_x, spawn_y);
-            //let p = Piece::new(Block::LightBlue, spawn_x, spawn_y);
 
             if bag.is_empty(){
                 bag = Block::VALUES.to_vec();
@@ -251,9 +248,6 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
 
         out += line;
 
-        assert_eq!(out.len(), RENDER_SIZE);
-        //println!("{}", out.len());
-        //return;
 
         //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
         print!("{}[2J", 27 as char);
@@ -436,23 +430,6 @@ fn handle_line_clears(field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, 
 
         *field = new_field;
     }
-
-    
-
-    //other 'solution' that failed because of having to mut borrow twice
-    /*let mut rows = field.rows_mut();
-    for mut row in rows.into_iter().rev(){
-        if row.iter().any(|b| *b != Block::None){
-            //found a non-empty row
-            //swap with last empty row
-            //decrement last empty (up)
-
-            std::mem::swap(&mut row, &mut rows.into_iter().nth(*last_empty).unwrap());
-
-            //last_empty.checked_sub(1);
-            }
-        }
-    }*/
 
     *cleared_lines += cleared.len() as i32;
     score

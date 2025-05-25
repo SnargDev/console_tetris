@@ -34,8 +34,6 @@ pub enum Rotation {
 }
 
 const COOLDOWN: Duration = Duration::from_millis(5);
-//use Keycode::*;
-//const KEYS: [Keycode; 10] = [Left, Right, Up, Space, C, LShift, RShift, Z, LControl, RControl];
 
 use std::sync::{Arc, Mutex};
 pub fn activate(package_access: Arc<Mutex<InputPackage>>){
@@ -44,16 +42,15 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
     let mut last_pressed: HashMap<Keycode, Instant> = HashMap::new();
     let now = Instant::now();
 
-    /*for data in InputData::VALUES{
-        last_pressed.insert(data.to_keycode(), now);
-    }*/
-
     use Keycode::*;
     for key in [Left, Right, Up, Z, LControl, Space, C, LShift, RShift]{
         last_pressed.insert(key, now);
     }
 
     loop {
+        //sleep a little to save the planet, no keyboard should poll fast enough for this to matter
+        std::thread::sleep(Duration::from_millis(1));
+
         let keys = DeviceState::get_keys(&device_state);
         let now = Instant::now();
 
@@ -101,12 +98,5 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
 
         let mut package = package_access.lock().unwrap();
         *package = new_package;
-
-        //the old closure, doesn't do exactly what it's supposed to
-        /*for key in keys.iter().filter(|kc| { 
-                        let res = last_pressed.contains_key(kc) && now.duration_since(last_pressed[kc]) > COOLDOWN; 
-                        if res { last_pressed.insert(**kc, now); } 
-                        res })
-        }*/
     }
 }
