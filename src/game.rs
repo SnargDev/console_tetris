@@ -8,12 +8,18 @@ use std::thread::sleep;
 use crate::input::InputPackage;
 use std::sync::{Arc, Mutex};
 
-const RENDER_SIZE: usize = 4440;
+//width of a line is 20 chars
+const RENDER_SIZE: usize = 2482;
+
+const FPS: u64 = 30;
+const FRAME_TIME: Duration = Duration::from_millis(1000/FPS);
+
+const RENDER_LINES: usize = 22;
 
 pub fn run(package_access: Arc<Mutex<InputPackage>>){
 
-    let spawn_x = 5;
-    let spawn_y = 10;
+    let spawn_x = 3;
+    let spawn_y = 20;
 
     //option because there should be an update inbetween placing a piece and spawning the next one
     //because otherwise the player could maybe hard drop onto blocks that are being cleared that turn
@@ -24,13 +30,18 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
     let size_y = 40;
     let mut field = Array::<Block, _>::from_elem((size_y, size_x).f(), Block::None);
 
-    let frame_time = Duration::from_millis(250);
     let mut last_frame = Instant::now();
 
     let mut just_stored = false;
     let mut stored: Option<Array2<Block>> = None;
 
     let mut score: u128 = 0;
+
+    let mut cleared_lines = 0;
+    let mut lvl = 0;
+
+    let mut ticks_per_grav_update = 10;
+    let mut ticks_since_grav_update = 0;
 
     loop {
 
@@ -77,24 +88,30 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
             }
 
 
-            //falling
-            let mut grav = 1;
-            if package.hard_drop{
-                grav = size_y;
-            } else if package.soft_drop {
-                grav = 3;
-            }
-
             let mut dropped = false;
-            for _ in 0..grav {
-                p.y += 1;
 
-                dropped = !is_piece_valid(p, &field);
+            if package.hard_drop || ticks_since_grav_update >= ticks_per_grav_update{
 
-                if dropped{
-                    p.y -= 1;
+                ticks_since_grav_update -= ticks_per_grav_update;
+
+                //falling
+                let mut grav = 1;
+                if package.hard_drop{
+                    grav = size_y;
+                }
+
+                for _ in 0..grav {
+                    p.y += 1;
+
+                    dropped = !is_piece_valid(p, &field);
+
+                    if dropped{
+                        p.y -= 1;
+                    }
                 }
             }
+            
+            ticks_since_grav_update += if package.soft_drop {4} else {1};
             
 
 
@@ -112,10 +129,14 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
                 piece = None;
                 just_stored = false;
                 
-                let score_add = check_for_line_clears(&mut field);
-                if score_add > 0{
-                    println!("score: {}", score_add);
-                    //std::process::exit(0);
+                score += handle_line_clears(&mut field, &mut cleared_lines) as u128;
+                if cleared_lines >= 10{
+                    cleared_lines -= 10;
+                    lvl += 1;
+
+                    if lvl % 5 == 0{
+                        ticks_per_grav_update = std::cmp::max(1, lvl-1);
+                    }
                 }
             }
         }
@@ -123,8 +144,43 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         //print screen
         //i should probably manually create the color prefix. having it on every block introduces a lot of overhead, esp on empty lines.
         //problem would then again be allocations so i'd have to go through the playing field to determine the amount of color changes.
-        let mut out = String::with_capacity(4440);//i just checked the size once, should probably do this mathematically
-        for (i, b) in field.iter().enumerate(){
+        let mut out = String::with_capacity(RENDER_SIZE);//i just checked the size once, should probably do this mathematically
+
+        out += &format!("Score: {}", score);
+        out += &" ".repeat(19 - out.len());
+        out += "\n";
+
+
+        out += &format!("Level: {}", lvl);
+        out += &" ".repeat(39 - out.len());
+        out += "\n";
+
+
+        let storage_display: Vec<String> = 
+        if let Some(ref held) = stored{
+
+            let mut s: Vec<String> = vec![];
+            for row in held.rows().into_iter(){
+
+                let mut r = String::with_capacity(row.dim() *2);
+                for b in row{
+                    r += &b.get_string_rep();
+                }
+
+                s.push(r);
+            }
+
+            if s.len() < 4{
+                s.push(String::from("\n"));
+            }
+
+            s
+        }
+        else{
+            vec!["None", "", "", ""].iter().map(|s| String::from(*s)).collect()
+        };
+
+        for (i, b) in field.iter().skip((size_y-RENDER_LINES) * size_x).enumerate(){
             out += &b.get_string_rep();
             if (i+1) % 10 == 0{
                 out += "\n";
@@ -139,6 +195,19 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         print!("{}[2J", 27 as char);
 
         println!("{}", out);
+
+        println!("{}", String::from("_").repeat(storage_display[0].len()));
+        if stored.is_some(){
+            for s in storage_display{
+                println!("|{}|", s);
+            }
+        }
+        else {
+            for _ in 0..4{
+                println!("|        |");
+            }
+        }
+        
 
         if let Some(ref p) = piece{
 
@@ -169,7 +238,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         
         let time = Instant::now();
         //debug_assert!(Duration::from_millis(2) > time.duration_since(last_frame), "{}", time.duration_since(last_frame).as_millis());
-        if let Some(sleep_for) = frame_time.checked_sub(time.duration_since(last_frame)){
+        if let Some(sleep_for) = FRAME_TIME.checked_sub(time.duration_since(last_frame)){
 
             if !sleep_for.is_zero() {
                 sleep(sleep_for);
@@ -284,7 +353,7 @@ fn perform_rotation(piece: &mut Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[
     }
 }
 
-fn check_for_line_clears(field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>) -> u32{
+fn handle_line_clears(field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, cleared_lines: &mut i32) -> u32{
 
     //turns out just swapping 2 rows in an ndarray is actually pretty complicated.
     //i tried using mem::swap but that requires 2 &mut to the rows, which violates
@@ -363,5 +432,6 @@ fn check_for_line_clears(field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>
         }
     }*/
 
+    *cleared_lines += cleared.len() as i32;
     score
 }
