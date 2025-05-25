@@ -36,6 +36,9 @@ impl InputData{
 pub struct InputPackage{
     pub move_x: i16,
     pub rotate: Rotation,
+    pub hard_drop: bool,
+    pub soft_drop: bool,
+    pub store: bool,
 }
 
 impl InputPackage{
@@ -43,7 +46,10 @@ impl InputPackage{
         InputPackage 
         {
             move_x: 0,
-            rotate: Rotation::Not
+            rotate: Rotation::Not,
+            hard_drop: false,
+            soft_drop: false,
+            store: false,
         }
     }
 }
@@ -71,7 +77,7 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
     }*/
 
     use Keycode::*;
-    for key in [Left, Right, Up, Z, LControl]{
+    for key in [Left, Right, Up, Z, LControl, Space, C, LShift, RShift]{
         last_pressed.insert(key, now);
     }
 
@@ -86,6 +92,13 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
         //this is more readable and easier to work with than iter.filter because of the nature of the checks
         //and ownership issues that would force me to insert the new time in the filter closure
         for key in keys{
+
+            //this is held, not pressed
+            if key == Down{
+                new_package.soft_drop = true;
+                continue;
+            }
+
             if !last_pressed.contains_key(&key){
                 continue;
             }
@@ -102,11 +115,16 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
                 Left => new_package.move_x = -1,
                 Right => new_package.move_x = 1,
                 Up => new_package.rotate = Rotation::Clockwise,
-                Z => new_package.rotate = Rotation::Counterclockwise,
-                LControl => new_package.rotate = Rotation::Counterclockwise,
+                Z | LControl => new_package.rotate = Rotation::Counterclockwise,
+                Space => new_package.hard_drop = true,
+                C | LShift | RShift => new_package.store = true,
 
                 _ => panic!("should not have reached the input matching expression with an unregistered key")
             }
+        }
+
+        if new_package.hard_drop{
+            new_package.move_x = 0;
         }
 
         let mut package = package_access.lock().unwrap();

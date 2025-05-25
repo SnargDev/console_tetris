@@ -27,6 +27,11 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
     let frame_time = Duration::from_millis(250);
     let mut last_frame = Instant::now();
 
+    let mut just_stored = false;
+    let mut stored: Option<Array2<Block>> = None;
+
+    let mut score: u128 = 0;
+
     loop {
 
         let package = 
@@ -39,58 +44,31 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         };
 
         
+        //2 ifs because thats how if let works ig
+        if let Some(ref mut p) = piece {
+            if package.store && !just_stored{
 
-        //gravity
+                if let Some(ref mut s) = stored{
+                    std::mem::swap(s, &mut p.matrix);
+                    p.x = spawn_x;
+                    p.y = spawn_y;
+                } else {
+                    stored = Some(p.matrix.clone());
+                    piece = None;
+                }
+
+                just_stored = true;
+            }
+        }
+
+
+        //piece movement
         if let Some(ref mut p) = piece{
 
+            //isolating this cause its a little longer
+            perform_rotation(p, &field, package.rotate);
 
-            use crate::input::Rotation;
-            if package.rotate != Rotation::Not{
-                let rotated = p.matrix_rotated(package.rotate);
-                //ideally i'd do this without clone, i think std::mem::swap/take could work
-                let old_matrix = p.matrix.clone();
-                p.matrix = rotated;
-
-                let init_fails = fail_count(p, &field);
-                let old_x = p.x;
-                let old_y = p.y;
-
-                //idk if these wall kicks are 100% accurate but im not going to read through half the tetris wiki and hardcode all the values for every piece, i like this
-                if init_fails > 0{
-
-                    //while fail count is decreasing
-                    //  move block
-                    // if fail count == 0 => done else back to initial position
-                    //if the only condition is for the fail count to <= prev then a piece could force itself through other blocks
-
-                    //up, down, right, left
-                    let adds = [(-1,0), (1,0), (0,1), (0,-1)];
-
-                    let mut fails = init_fails;
-
-                    for add in adds{
-                        while fails > 0 {
-                            p.y += add.0;
-                            p.x += add.1;
-
-                            let (ok, f) = fits_fail_limit(p, &field, fails);
-                            //apparently you could just do let (ok, fails) = ... but that doesnt work here?
-                            fails = f;
-
-                            if !ok{
-                                p.x = old_x;
-                                p.y = old_y;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if !is_piece_valid(p, &field){
-                    p.matrix = old_matrix;
-                }
-            }
-
+            //LR movement
             if package.move_x != 0{
                 p.x += package.move_x;
                 if !is_piece_valid(p, &field){
@@ -98,16 +76,29 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
                 }
             }
 
-            p.y += 1;
+
+            //falling
+            let mut grav = 1;
+            if package.hard_drop{
+                grav = size_y;
+            } else if package.soft_drop {
+                grav = 3;
+            }
+
+            let mut dropped = false;
+            for _ in 0..grav {
+                p.y += 1;
+
+                dropped = !is_piece_valid(p, &field);
+
+                if dropped{
+                    p.y -= 1;
+                }
+            }
+            
 
 
             let matrix_x = p.matrix.dim().1;
-            let dropped = !is_piece_valid(p, &field);
-
-            if dropped{
-                //println!("dropped piece");
-                p.y -= 1;
-            }
 
             //put piece on the matrix
             for (i, b) in p.matrix.iter().enumerate().filter(|(_, b)| **b != Block::None){
@@ -119,6 +110,13 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
 
             if dropped{
                 piece = None;
+                just_stored = false;
+                
+                let score_add = check_for_line_clears(&mut field);
+                if score_add > 0{
+                    println!("score: {}", score_add);
+                    //std::process::exit(0);
+                }
             }
         }
 
@@ -134,7 +132,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         }
 
         assert_eq!(out.len(), RENDER_SIZE);
-
         //println!("{}", out.len());
         //return;
 
@@ -158,7 +155,14 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
             }
         }
         else {
-            piece = Some(Piece::new(Block::VALUES[rand::random_range(0..(Block::VALUES.len()-1))], spawn_x, spawn_y));
+            //let p = Piece::new(Block::VALUES[rand::random_range(0..(Block::VALUES.len()-1))], spawn_x, spawn_y);
+            let p = Piece::new(Block::LightBlue, spawn_x, spawn_y);
+
+            if !is_piece_valid(&p, &field){
+                //implement actual game over here
+                std::process::exit(0);
+            }
+            piece = Some(p);
         }
 
 
@@ -175,8 +179,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         last_frame = Instant::now();
     }
 }
-
-//fn is_block_valid(i: usize, b: &Block, matrix_x: usize, )
 
 //this should bake the arguments into the closure as to avoid passing them and recalculating all the values for every single block, which would also involve
 //accessing stuff from the shape of the matrix and thats slow
@@ -213,16 +215,6 @@ fn fail_count(piece: &Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>
     //didnt come up with this myself, rust people on discord are pretty cool
     let validation_closure = get_block_validation_closure(piece, field);
     piece.matrix.iter().enumerate().filter(|(i,b)| {!validation_closure((*i,b))}).count()
-
-    /*let mut fails = 0;
-    let validation_closure = get_block_validation_closure(piece, field);
-    for (i, b) in piece.matrix.iter().enumerate(){
-        if validation_closure((i, b)){
-            fails += 1;
-        }
-    }
-
-    fails*/
 }
 
 //this short curcuits as to not view the entire matrix every time
@@ -242,22 +234,134 @@ fn fits_fail_limit(piece: &Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[usize
     (true, fails)
 }
 
-/*
-fn is_piece_valid(piece: &Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>) -> bool{
-    let (_, matrix_x) = piece.matrix.dim();
+use crate::input::Rotation;
+fn perform_rotation(piece: &mut Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, rotate: Rotation){
+    
+    if rotate != Rotation::Not{
+        let rotated = piece.matrix_rotated(rotate);
+        //ideally i'd do this without clone, i think std::mem::swap/take could work
+        let old_matrix = piece.matrix.clone();
+        piece.matrix = rotated;
 
+        let init_fails = fail_count(piece, &field);
+        let old_x = piece.x;
+        let old_y = piece.y;
 
-    let(my, mx) = field.dim();
-    let max_x = mx-1;
-    let max_y = my-1;
+        //idk if these wall kicks are 100% accurate but im not going to read through half the tetris wiki and hardcode all the values for every piece, i like this
+        if init_fails > 0{
 
-    piece.matrix.iter().enumerate().all(|(i, b)| *b == Block::None || {
+            //while fail count is decreasing
+            //  move block
+            // if fail count == 0 => done else back to initial position
+            //if the only condition is for the fail count to <= prev then a piece could force itself through other blocks
 
-    let tmp = i % matrix_x;
-    let y = piece.y + ((i - tmp)/matrix_x) as i16;
-    let x = tmp as i16 + piece.x;
+            //up, down, right, left
+            let adds = [(-1,0), (1,0), (0,1), (0,-1)];
 
-    y <= max_y as i16 && x <= max_x as i16 && x > 0 && field[[y as usize, x as usize]] == Block::None
-    })
+            let mut fails = init_fails;
+
+            for add in adds{
+                while fails > 0 {
+                    piece.y += add.0;
+                    piece.x += add.1;
+
+                    let (ok, f) = fits_fail_limit(piece, &field, fails);
+                    //apparently you could just do let (ok, fails) = ... but that doesnt work here? like it just shadows fails
+                    fails = f;
+
+                    if !ok{
+                        piece.x = old_x;
+                        piece.y = old_y;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !is_piece_valid(piece, &field){
+            piece.matrix = old_matrix;
+        }
+    }
 }
-*/
+
+fn check_for_line_clears(field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>) -> u32{
+
+    //turns out just swapping 2 rows in an ndarray is actually pretty complicated.
+    //i tried using mem::swap but that requires 2 &mut to the rows, which violates
+    //borrowing rules. instead i just decided to copy the entire thing if needed.
+    //rust is fast and its just enum values and not strings. also it rarely happens
+
+    let cleared: Vec<usize> =   field.rows().into_iter().enumerate()
+                                //filter out empty rows
+                                .filter(|(_, r)| r.iter().
+                                    all(|b| *b != Block::None))
+                                //remember them by their index
+                                .map(|(i, _)| i)
+                                .collect();
+    
+    let score = match cleared.len() {
+        0 => 0,
+        1 => 40,
+        2 => 100,
+        3 => 300,
+        4 => 1200,
+
+        _ => panic!("Cannot clear more than 4 rows in one turn")
+    };
+
+    //fill cleared lines with Block::None
+    for i in &cleared{
+        let mut row = field.row_mut(*i);
+        for j in 0..row.len(){
+            row[j] = Block::None;
+        }
+    }
+
+    if cleared.last().is_some(){
+
+        let mut new_field = Array::<Block, _>::from_elem(field.dim().f(), Block::None);
+
+
+        let mut new_rows = new_field.rows_mut().into_iter().rev();
+        let mut new_row = new_rows.next().unwrap();
+
+        for row in field.rows().into_iter().rev(){
+            
+            let mut advance = false;
+            
+            for (i, b) in row.iter().enumerate(){
+                if *b != Block::None{
+                    advance = true;
+                }
+
+                new_row[i] = *b;
+            }
+
+            //if there are only 'None' blocks in the old row then the new row should not change -> blocks sink to the bottom
+            if advance{
+                new_row = new_rows.next().unwrap();
+            }
+        }
+
+        *field = new_field;
+    }
+
+    
+
+    //other 'solution' that failed because of having to mut borrow twice
+    /*let mut rows = field.rows_mut();
+    for mut row in rows.into_iter().rev(){
+        if row.iter().any(|b| *b != Block::None){
+            //found a non-empty row
+            //swap with last empty row
+            //decrement last empty (up)
+
+            std::mem::swap(&mut row, &mut rows.into_iter().nth(*last_empty).unwrap());
+
+            //last_empty.checked_sub(1);
+            }
+        }
+    }*/
+
+    score
+}
