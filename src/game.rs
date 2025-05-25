@@ -38,7 +38,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
     let mut score: u128 = 0;
 
     let mut cleared_lines = 0;
-    let mut lvl = 0;
+    let mut lvl: u128 = 0;
 
     let mut ticks_per_grav_update = 10;
     let mut ticks_since_grav_update = 0;
@@ -141,73 +141,8 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
             }
         }
 
-        //print screen
-        //i should probably manually create the color prefix. having it on every block introduces a lot of overhead, esp on empty lines.
-        //problem would then again be allocations so i'd have to go through the playing field to determine the amount of color changes.
-        let mut out = String::with_capacity(RENDER_SIZE);//i just checked the size once, should probably do this mathematically
-
-        out += &format!("Score: {}", score);
-        out += &" ".repeat(19 - out.len());
-        out += "\n";
-
-
-        out += &format!("Level: {}", lvl);
-        out += &" ".repeat(39 - out.len());
-        out += "\n";
-
-
-        let storage_display: Vec<String> = 
-        if let Some(ref held) = stored{
-
-            let mut s: Vec<String> = vec![];
-            for row in held.rows().into_iter(){
-
-                let mut r = String::with_capacity(row.dim() *2);
-                for b in row{
-                    r += &b.get_string_rep();
-                }
-
-                s.push(r);
-            }
-
-            if s.len() < 4{
-                s.push(String::from("\n"));
-            }
-
-            s
-        }
-        else{
-            vec!["None", "", "", ""].iter().map(|s| String::from(*s)).collect()
-        };
-
-        for (i, b) in field.iter().skip((size_y-RENDER_LINES) * size_x).enumerate(){
-            out += &b.get_string_rep();
-            if (i+1) % 10 == 0{
-                out += "\n";
-            }
-        }
-
-        assert_eq!(out.len(), RENDER_SIZE);
-        //println!("{}", out.len());
-        //return;
-
-        //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
-        print!("{}[2J", 27 as char);
-
-        println!("{}", out);
-
-        println!("{}", String::from("_").repeat(storage_display[0].len()));
-        if stored.is_some(){
-            for s in storage_display{
-                println!("|{}|", s);
-            }
-        }
-        else {
-            for _ in 0..4{
-                println!("|        |");
-            }
-        }
         
+        render(&field, score, lvl, &stored);
 
         if let Some(ref p) = piece{
 
@@ -247,6 +182,77 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
 
         last_frame = Instant::now();
     }
+}
+
+fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl: u128, stored: &Option<Array2<Block>>){
+        //print screen
+        //i should probably manually create the color prefix. having it on every block introduces a lot of overhead, esp on empty lines.
+        //problem would then again be allocations so i'd have to go through the playing field to determine the amount of color changes.
+        let mut out = String::with_capacity(RENDER_SIZE);//i just checked the size once, should probably do this mathematically
+
+        let (size_y, size_x) = field.dim();
+
+        out += &format!("Score: {}", score);
+        out += &" ".repeat(19 - out.len());
+        out += "\n";
+
+
+        out += &format!("Level: {}", lvl);
+        out += &" ".repeat(39 - out.len());
+        out += "\n";
+
+
+        let storage_display: Vec<String> = 
+        if let Some(held) = stored{
+
+            let mut s: Vec<String> = vec![];
+            for row in held.rows().into_iter(){
+
+                let mut r = String::with_capacity(35);
+                for b in row{
+                    r += &b.get_string_rep();
+                }
+                
+                s.push(r);
+            }
+
+            if s.len() < 4{
+                s.push(String::from("\n"));
+            }
+
+            s
+        }
+        else{
+            vec!["None", "", "", ""].iter().map(|s| String::from(*s)).collect()
+        };
+
+        for (i, b) in field.iter().skip((size_y-RENDER_LINES) * size_x).enumerate(){
+            out += &b.get_string_rep();
+            if (i+1) % 10 == 0{
+                out += "\n";
+            }
+        }
+
+        assert_eq!(out.len(), RENDER_SIZE);
+        //println!("{}", out.len());
+        //return;
+
+        //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
+        print!("{}[2J", 27 as char);
+
+        println!("{}", out);
+
+        println!("{}", String::from("_").repeat(storage_display[0].len()));
+        if stored.is_some(){
+            for s in storage_display{
+                println!("|{}|", s);
+            }
+        }
+        else {
+            for _ in 0..4{
+                println!("|{}|", " ".repeat(8));
+            }
+        }
 }
 
 //this should bake the arguments into the closure as to avoid passing them and recalculating all the values for every single block, which would also involve
