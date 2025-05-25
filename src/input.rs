@@ -3,34 +3,6 @@ use std::time::{Duration, Instant};
 use std::collections::HashMap;
 
 
-#[derive(Eq, Hash, PartialEq)]
-pub enum InputData {
-    Left,
-    Right
-}
-
-use InputData::*;
-impl InputData{
-    pub const VALUES: [Self; 2] = [Left, Right];
-
-    fn from_keycode(keycode: Keycode) -> Option<InputData>{
-        use Keycode::*;
-        match keycode {
-            Left => Some(InputData::Left),
-            Right => Some(InputData::Right),
-
-            _ => None
-        }
-    }
-
-    fn to_keycode(&self) -> Keycode{
-        use Keycode::*;
-        match self {
-            InputData::Left => Left,
-            InputData::Right => Right
-        }
-    }
-}
 
 #[derive(Clone)]
 pub struct InputPackage{
