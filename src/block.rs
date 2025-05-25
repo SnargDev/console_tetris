@@ -33,7 +33,7 @@ impl Block{
             LightBlue => Colorize::cyan("[]"),
             DarkBlue => Colorize::blue("[]"),
             Orange => Colorize::yellow("[]"),
-            Yellow => Colorize::truecolor("[]", 255, 210, 0),
+            Yellow => Colorize::bright_yellow("[]"), //Colorize::truecolor("[]", 255, 210, 0),
             Green => Colorize::green("[]"),
             Red => Colorize::red("[]"),
             Magenta => Colorize::magenta("[]"),
