@@ -14,7 +14,8 @@ pub enum Block {
 }
 
 impl Block{
-   pub const VALUES: [Self; 8] = [Block::LightBlue, Block::DarkBlue, Block::Orange, Block::Yellow, Block::Green, Block::Red, Block::Magenta, Block::None];
+   ///All the values in Block except for None
+   pub const VALUES: [Self; 7] = [Block::LightBlue, Block::DarkBlue, Block::Orange, Block::Yellow, Block::Green, Block::Red, Block::Magenta];
 }
 
 impl std::fmt::Display for Block{

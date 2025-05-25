@@ -8,8 +8,7 @@ use std::thread::sleep;
 use crate::input::InputPackage;
 use std::sync::{Arc, Mutex};
 
-//width of a line is 20 chars
-const RENDER_SIZE: usize = 2482;
+
 
 const FPS: u64 = 30;
 const FRAME_TIME: Duration = Duration::from_millis(1000/FPS);
@@ -24,7 +23,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
     //option because there should be an update inbetween placing a piece and spawning the next one
     //because otherwise the player could maybe hard drop onto blocks that are being cleared that turn
     //also this lets me set it to none once dropped, making the rest of the loop a little simpler
-    let mut piece: Option<Piece> = Some(Piece::new(Block::Red, spawn_x, spawn_y));//None;
+    let mut piece: Option<Piece> = None;//Some(Piece::new(Block::Red, spawn_x, spawn_y));//None;
 
     let size_x = 10;
     let size_y = 40;
@@ -40,8 +39,11 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
     let mut cleared_lines = 0;
     let mut lvl: u128 = 0;
 
-    let mut ticks_per_grav_update = 10;
-    let mut ticks_since_grav_update = 0;
+    let mut ticks_per_grav_update: u16 = 10;
+    let mut ticks_since_grav_update: u16 = 0;
+
+
+    let mut bag: Vec<Block> = vec![];
 
     loop {
 
@@ -92,7 +94,8 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
 
             if package.hard_drop || ticks_since_grav_update >= ticks_per_grav_update{
 
-                ticks_since_grav_update -= ticks_per_grav_update;
+                ticks_since_grav_update = ticks_since_grav_update.checked_sub(ticks_per_grav_update).or_else(|| Some(0)).unwrap();
+                //ticks_since_grav_update -= ticks_per_grav_update;
 
                 //falling
                 let mut grav = 1;
@@ -135,7 +138,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
                     lvl += 1;
 
                     if lvl % 5 == 0{
-                        ticks_per_grav_update = std::cmp::max(1, lvl-1);
+                        ticks_per_grav_update = std::cmp::max(1, lvl as u16 -1 );
                     }
                 }
             }
@@ -160,10 +163,20 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         }
         else {
             //let p = Piece::new(Block::VALUES[rand::random_range(0..(Block::VALUES.len()-1))], spawn_x, spawn_y);
-            let p = Piece::new(Block::LightBlue, spawn_x, spawn_y);
+            //let p = Piece::new(Block::LightBlue, spawn_x, spawn_y);
+
+            if bag.is_empty(){
+                bag = Block::VALUES.to_vec();
+            }
+
+            //have to do this with an if cause 0..0 panics
+            let random = if bag.len() > 1 {rand::random_range(0..bag.len()-1)} else {0};
+            let p = Piece::new(bag.remove(random), spawn_x, spawn_y);
 
             if !is_piece_valid(&p, &field){
-                //implement actual game over here
+                print!("{}[2J", 27 as char);
+                let s = format!("{}{}{}", " ".repeat(size_x/2), format!("YOU LOST. SCORE: {}", score), " ".repeat(size_x/2));
+                println!("{}", colored::Colorize::red(s.as_str()));
                 std::process::exit(0);
             }
             piece = Some(p);
@@ -184,6 +197,9 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
     }
 }
 
+
+//width of a line is 20 chars
+const RENDER_SIZE: usize = 2568;
 fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl: u128, stored: &Option<Array2<Block>>){
         //print screen
         //i should probably manually create the color prefix. having it on every block introduces a lot of overhead, esp on empty lines.
@@ -202,6 +218,9 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
         out += "\n";
 
 
+        let line = &format!("+{}+", &"-".repeat(size_x*2));
+        out += line;
+
         let storage_display: Vec<String> = 
         if let Some(held) = stored{
 
@@ -216,10 +235,6 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
                 s.push(r);
             }
 
-            if s.len() < 4{
-                s.push(String::from("\n"));
-            }
-
             s
         }
         else{
@@ -229,9 +244,12 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
         for (i, b) in field.iter().skip((size_y-RENDER_LINES) * size_x).enumerate(){
             out += &b.get_string_rep();
             if (i+1) % 10 == 0{
-                out += "\n";
+                out += if i > 10 {"|\n|"} else {"\n|"};
             }
         }
+        out.pop();
+
+        out += line;
 
         assert_eq!(out.len(), RENDER_SIZE);
         //println!("{}", out.len());
@@ -242,16 +260,14 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
 
         println!("{}", out);
 
-        println!("{}", String::from("_").repeat(storage_display[0].len()));
+        println!("\nStorage:");
         if stored.is_some(){
             for s in storage_display{
-                println!("|{}|", s);
+                println!("{}", s);
             }
         }
         else {
-            for _ in 0..4{
-                println!("|{}|", " ".repeat(8));
-            }
+            println!("Empty")
         }
 }
 
