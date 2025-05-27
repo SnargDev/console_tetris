@@ -8,3 +8,9 @@ colored = "3.0.0"
 device_query = "3.0.1"
 ndarray = "0.16.1"
 rand = "0.9.1"
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
