@@ -174,7 +174,8 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
                 print!("{}[2J", 27 as char);
                 let s = format!("{}{}{}", " ".repeat(size_x/2), format!("YOU LOST. SCORE: {}", score), " ".repeat(size_x/2));
                 println!("{}", colored::Colorize::red(s.as_str()));
-                std::process::exit(0);
+                return;
+                //std::process::exit(0);
             }
             piece = Some(p);
         }

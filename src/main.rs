@@ -25,17 +25,21 @@ fn main() {
         input::activate(clone)
     });
 
-    game::run(package_access);
+    loop{
+        game::run(package_access.clone());
 
-    //to terminate the input gathering thread instead of keeping the program in limbo forever
-    std::process::exit(0);
-    //https://github.com/rust-ndarray/ndarray/blob/master/README-quick-start.md
+        println!("Play again? Y/N");
+        loop {
+            use std::io;
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)
+            .expect("Failed to read line.");
+
+            match input.trim().to_ascii_uppercase().as_str(){
+                "Y" => break,
+                "N" => std::process::exit(0),
+                _ => println!("Invalid input '{}', expected Y or N.", input)
+            }
+        }
+    }
 }
-
-
-
-/*
-1. Rendering
--2d matrix to store color
--iterate over color matrix and render
- */
