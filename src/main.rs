@@ -16,7 +16,12 @@ mod input;
 use std::thread;
 
 use std::sync::{Arc, Mutex};
+
+
 fn main() {
+
+    println!("Use color?");
+    let use_color = get_yn_inp();
 
     let package_access = Arc::new(Mutex::new(input::InputPackage::new()));
     let clone = package_access.clone();
@@ -26,20 +31,28 @@ fn main() {
     });
 
     loop{
-        game::run(package_access.clone());
+        game::run(package_access.clone(), use_color);
 
         println!("Play again? Y/N");
-        loop {
-            use std::io;
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)
-            .expect("Failed to read line.");
+        if !get_yn_inp(){
+            //using exit because while main probably takes all other threads with it, extra safety cant hurt
+            std::process::exit(0);
+        }
+    }
+}
 
-            match input.trim().to_ascii_uppercase().as_str(){
-                "Y" => break,
-                "N" => std::process::exit(0),
-                _ => println!("Invalid input '{}', expected Y or N.", input)
-            }
+fn get_yn_inp() -> bool{
+    loop { 
+        use std::io;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)
+        .expect("Failed to read line.");
+        input = input.trim().to_ascii_uppercase();
+
+        match input.as_str(){
+            "Y" => return true,
+            "N" => return false,
+            _ => println!("Invalid input '{}', expected Y or N.", input)
         }
     }
 }

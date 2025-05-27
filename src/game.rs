@@ -15,10 +15,12 @@ const FRAME_TIME: Duration = Duration::from_millis(1000/FPS);
 
 const RENDER_LINES: usize = 22;
 
-pub fn run(package_access: Arc<Mutex<InputPackage>>){
+pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
 
     let spawn_x = 3;
     let spawn_y = 20;
+
+    let mut render_size: usize = 0;
 
     //option because there should be an update inbetween placing a piece and spawning the next one
     //because otherwise the player could maybe hard drop onto blocks that are being cleared that turn
@@ -144,7 +146,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
         }
 
         
-        render(&field, score, lvl, &stored);
+        render(&field, score, lvl, &stored, &mut render_size, use_color);
 
         if let Some(ref p) = piece{
 
@@ -173,9 +175,8 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
             if !is_piece_valid(&p, &field){
                 print!("{}[2J", 27 as char);
                 let s = format!("{}{}{}", " ".repeat(size_x/2), format!("YOU LOST. SCORE: {}", score), " ".repeat(size_x/2));
-                println!("{}", colored::Colorize::red(s.as_str()));
+                if use_color {println!("{}", colored::Colorize::red(s.as_str()));} else {println!("{}", s);}
                 return;
-                //std::process::exit(0);
             }
             piece = Some(p);
         }
@@ -196,13 +197,11 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>){
 }
 
 
-//width of a line is 20 chars
-const RENDER_SIZE: usize = 2568;
-fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl: u128, stored: &Option<Array2<Block>>){
+fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl: u128, stored: &Option<Array2<Block>>, render_size: &mut usize, use_color: bool){
         //print screen
         //i should probably manually create the color prefix. having it on every block introduces a lot of overhead, esp on empty lines.
         //problem would then again be allocations so i'd have to go through the playing field to determine the amount of color changes.
-        let mut out = String::with_capacity(RENDER_SIZE);//i just checked the size once, should probably do this mathematically
+        let mut out = String::with_capacity(*render_size);//i just checked the size once, should probably do this mathematically
 
         let (size_y, size_x) = field.dim();
 
@@ -227,7 +226,7 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
 
                 let mut r = String::with_capacity(35);
                 for b in row{
-                    r += &b.get_string_rep();
+                    r += &b.get_string_rep(use_color);
                 }
                 
                 s.push(r);
@@ -240,7 +239,7 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
         };
 
         for (i, b) in field.iter().skip((size_y-RENDER_LINES) * size_x).enumerate(){
-            out += &b.get_string_rep();
+            out += &b.get_string_rep(use_color);
             if (i+1) % 10 == 0{
                 out += if i > 10 {"|\n|"} else {"\n|"};
             }
@@ -249,11 +248,16 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
 
         out += line;
 
+        if out.len() != *render_size{
+            *render_size = out.len();
+        }
+
 
         //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
-        print!("{}[2J", 27 as char);
+        let clear = format!("{}[2J", 27 as char);
+        //print!("{}[2J", 27 as char);
 
-        println!("{}", out);
+        println!("{}{}", clear, out);
 
         println!("\nStorage:");
         if stored.is_some(){
