@@ -22,10 +22,10 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
 
     let mut render_size: usize = 0;
 
-    //option because there should be an update inbetween placing a piece and spawning the next one
-    //because otherwise the player could maybe hard drop onto blocks that are being cleared that turn
+    //option because there should be an update inbetween placing a piece and spawning the next one.
+    //otherwise the player could maybe hard drop onto blocks that are being cleared that turn
     //also this lets me set it to none once dropped, making the rest of the loop a little simpler
-    let mut piece: Option<Piece> = None;//Some(Piece::new(Block::Red, spawn_x, spawn_y));//None;
+    let mut piece: Option<Piece> = None;
 
     let size_x = 10;
     let size_y = 40;
@@ -48,6 +48,8 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
     let mut bag: Vec<Block> = vec![];
 
     loop {
+
+        let mut screen_changed = false;
 
         let package = 
         {
@@ -73,6 +75,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
                 }
 
                 just_stored = true;
+                screen_changed = true;
             }
         }
 
@@ -81,13 +84,15 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
         if let Some(ref mut p) = piece{
 
             //isolating this cause its a little longer
-            perform_rotation(p, &field, package.rotate);
+            screen_changed |= perform_rotation(p, &field, package.rotate);
 
             //LR movement
             if package.move_x != 0{
                 p.x += package.move_x;
                 if !is_piece_valid(p, &field){
                     p.x -= package.move_x;
+                } else {
+                    screen_changed = true;
                 }
             }
 
@@ -95,6 +100,8 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
             let mut dropped = false;
 
             if package.hard_drop || ticks_since_grav_update >= ticks_per_grav_update{
+
+                screen_changed = true;
 
                 ticks_since_grav_update = ticks_since_grav_update.checked_sub(ticks_per_grav_update).or_else(|| Some(0)).unwrap();
 
@@ -146,7 +153,9 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
         }
 
         
-        render(&field, score, lvl, &stored, &mut render_size, use_color);
+        if screen_changed{
+            render(&field, score, lvl, &stored, &mut render_size, use_color);
+        }
 
         if let Some(ref p) = piece{
 
@@ -184,7 +193,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
 
         
         let time = Instant::now();
-        //debug_assert!(Duration::from_millis(2) > time.duration_since(last_frame), "{}", time.duration_since(last_frame).as_millis());
         if let Some(sleep_for) = FRAME_TIME.checked_sub(time.duration_since(last_frame)){
 
             if !sleep_for.is_zero() {
@@ -198,10 +206,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
 
 
 fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl: u128, stored: &Option<Array2<Block>>, render_size: &mut usize, use_color: bool){
-        //print screen
-        //i should probably manually create the color prefix. having it on every block introduces a lot of overhead, esp on empty lines.
-        //problem would then again be allocations so i'd have to go through the playing field to determine the amount of color changes.
-        let mut out = String::with_capacity(*render_size);//i just checked the size once, should probably do this mathematically
+        let mut out = String::with_capacity(*render_size);
 
         let (size_y, size_x) = field.dim();
 
@@ -255,7 +260,6 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
 
         //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
         let clear = format!("{}[2J", 27 as char);
-        //print!("{}[2J", 27 as char);
 
         println!("{}{}", clear, out);
 
@@ -272,7 +276,6 @@ fn render(field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, score: u128, lvl
 
 //this should bake the arguments into the closure as to avoid passing them and recalculating all the values for every single block, which would also involve
 //accessing stuff from the shape of the matrix and thats slow
-//i dont know what im doing, i just followed the compiler when it said to add lifetimes and a move (does make sense though)
 fn get_block_validation_closure<'a>(piece: &'a Piece, field: &'a ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>) -> Box<dyn Fn((usize, &Block)) -> bool + 'a>{
     let (_, matrix_x) = piece.matrix.dim();
 
@@ -325,53 +328,59 @@ fn fits_fail_limit(piece: &Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[usize
 }
 
 use crate::input::Rotation;
-fn perform_rotation(piece: &mut Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, rotate: Rotation){
+///rotates the matrix of the piece and returns whether a rotation occured or not
+fn perform_rotation(piece: &mut Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, rotate: Rotation) -> bool{
     
-    if rotate != Rotation::Not{
-        let rotated = piece.matrix_rotated(rotate);
-        //ideally i'd do this without clone, i think std::mem::swap/take could work
-        let old_matrix = piece.matrix.clone();
-        piece.matrix = rotated;
+    if rotate == Rotation::Not{
+        return false;
+    }
 
-        let init_fails = fail_count(piece, &field);
-        let old_x = piece.x;
-        let old_y = piece.y;
+    let rotated = piece.matrix_rotated(rotate);
+    //ideally i'd do this without clone, i think std::mem::swap/take could work
+    let old_matrix = piece.matrix.clone();
+    piece.matrix = rotated;
 
-        //idk if these wall kicks are 100% accurate but im not going to read through half the tetris wiki and hardcode all the values for every piece, i like this
-        if init_fails > 0{
+    let init_fails = fail_count(piece, &field);
+    let old_x = piece.x;
+    let old_y = piece.y;
 
-            //while fail count is decreasing
-            //  move block
-            // if fail count == 0 => done else back to initial position
-            //if the only condition is for the fail count to <= prev then a piece could force itself through other blocks
+    //idk if these wall kicks are 100% accurate but im not going to read through half the tetris wiki and hardcode all the values for every piece, i like this
+    if init_fails > 0{
 
-            //up, down, right, left
-            let adds = [(-1,0), (1,0), (0,1), (0,-1)];
+        //while fail count is decreasing
+        //  move block
+        // if fail count == 0 => done else back to initial position
+        //if the only condition is for the fail count to <= prev then a piece could force itself through other blocks
 
-            let mut fails = init_fails;
+        //up, down, right, left
+        let adds = [(-1,0), (1,0), (0,1), (0,-1)];
 
-            for add in adds{
-                while fails > 0 {
-                    piece.y += add.0;
-                    piece.x += add.1;
+        let mut fails = init_fails;
 
-                    let (ok, f) = fits_fail_limit(piece, &field, fails);
-                    //apparently you could just do let (ok, fails) = ... but that doesnt work here? like it just shadows fails
-                    fails = f;
+        for add in adds{
+            while fails > 0 {
+                piece.y += add.0;
+                piece.x += add.1;
 
-                    if !ok{
-                        piece.x = old_x;
-                        piece.y = old_y;
-                        break;
-                    }
+                let (ok, f) = fits_fail_limit(piece, &field, fails);
+                //apparently you could just do let (ok, fails) = ... but that doesnt work here? like it just shadows fails
+                fails = f;
+
+                if !ok{
+                    piece.x = old_x;
+                    piece.y = old_y;
+                    break;
                 }
             }
         }
-
-        if !is_piece_valid(piece, &field){
-            piece.matrix = old_matrix;
-        }
     }
+
+    if !is_piece_valid(piece, &field){
+        piece.matrix = old_matrix;
+        return false;
+    }
+
+    return true;
 }
 
 fn handle_line_clears(field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, cleared_lines: &mut i32) -> u32{
@@ -407,7 +416,7 @@ fn handle_line_clears(field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>, 
         }
     }
 
-    if cleared.last().is_some(){
+    if !cleared.is_empty(){
 
         let mut new_field = Array::<Block, _>::from_elem(field.dim().f(), Block::None);
 

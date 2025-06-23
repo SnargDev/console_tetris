@@ -48,7 +48,7 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
     }
 
     loop {
-        //sleep a little to save the planet, no keyboard should poll fast enough for this to matter
+        //no keyboard should poll fast enough for this to matter, should marginally improve power usage
         std::thread::sleep(Duration::from_millis(1));
 
         let keys = DeviceState::get_keys(&device_state);
@@ -79,7 +79,6 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
             }
 
             
-            //here it should probably match against a desired behavior instead of key, dont have time for that now
             match key{
                 Left => new_package.move_x = -1,
                 Right => new_package.move_x = 1,

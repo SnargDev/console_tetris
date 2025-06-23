@@ -35,7 +35,6 @@ fn main() {
 
         println!("Play again? Y/N");
         if !get_yn_inp(){
-            //using exit because while main probably takes all other threads with it, extra safety cant hurt
             std::process::exit(0);
         }
     }

@@ -7,7 +7,6 @@ use crate::input::Rotation;
 pub struct Piece{
     pub matrix: Array2<Block>,
     pub x: i16,
-    //is never negative but should be i16 for consistency
     pub y: i16,
 }
 
@@ -25,7 +24,7 @@ impl Piece{
             Block::LightBlue => vec![(1,0), (1,1), (1,2), (1,3)],
             Block::DarkBlue => vec![(0,0), (1,0), (1,1), (1,2)],
             Block::Orange => vec![(0,2), (1,0), (1,1), (1,2)],
-            Block::Yellow => vec![],//(0,1), (0,2), (1,1), (1,2)],
+            Block::Yellow => vec![],
             Block::Green => vec![(0,1),(0,2),(1,0),(1,1)],
             Block::Magenta => vec![(0,1), (1,0), (1,1), (1,2)],
             Block::Red => vec![(0,0), (0,1), (1,1), (1,2)],
