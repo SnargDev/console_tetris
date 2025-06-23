@@ -1,11 +1,9 @@
-use device_query::{DeviceState, DeviceQuery, Keycode};
-use std::time::{Duration, Instant};
+use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::collections::HashMap;
-
-
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
-pub struct InputPackage{
+pub struct InputPackage {
     pub move_x: i16,
     pub rotate: Rotation,
     pub hard_drop: bool,
@@ -13,10 +11,9 @@ pub struct InputPackage{
     pub store: bool,
 }
 
-impl InputPackage{
-    pub fn new() -> InputPackage{
-        InputPackage 
-        {
+impl InputPackage {
+    pub fn new() -> InputPackage {
+        InputPackage {
             move_x: 0,
             rotate: Rotation::Not,
             hard_drop: false,
@@ -30,20 +27,20 @@ impl InputPackage{
 pub enum Rotation {
     Clockwise,
     Counterclockwise,
-    Not
+    Not,
 }
 
 const COOLDOWN: Duration = Duration::from_millis(5);
 
 use std::sync::{Arc, Mutex};
-pub fn activate(package_access: Arc<Mutex<InputPackage>>){
+pub fn activate(package_access: Arc<Mutex<InputPackage>>) {
     let device_state = DeviceState::new();
 
     let mut last_pressed: HashMap<Keycode, Instant> = HashMap::new();
     let now = Instant::now();
 
     use Keycode::*;
-    for key in [Left, Right, Up, Z, LControl, Space, C, LShift, RShift]{
+    for key in [Left, Right, Up, Z, LControl, Space, C, LShift, RShift] {
         last_pressed.insert(key, now);
     }
 
@@ -56,30 +53,28 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
 
         //pick up inputs from last package
         //this is in curlies so the lock is dropped early
-        let mut new_package = {package_access.lock().unwrap().clone()};
+        let mut new_package = { package_access.lock().unwrap().clone() };
 
         //this is more readable and easier to work with than iter.filter because of the nature of the checks
         //and ownership issues that would force me to insert the new time in the filter closure
-        for key in keys{
-
+        for key in keys {
             //this is held, not pressed
-            if key == Down{
+            if key == Down {
                 new_package.soft_drop = true;
                 continue;
             }
 
-            if !last_pressed.contains_key(&key){
+            if !last_pressed.contains_key(&key) {
                 continue;
             }
 
             let since = now.duration_since(last_pressed[&key]);
             last_pressed.insert(key, now);
-            if since < COOLDOWN{
+            if since < COOLDOWN {
                 continue;
             }
 
-            
-            match key{
+            match key {
                 Left => new_package.move_x = -1,
                 Right => new_package.move_x = 1,
                 Up => new_package.rotate = Rotation::Clockwise,
@@ -87,11 +82,13 @@ pub fn activate(package_access: Arc<Mutex<InputPackage>>){
                 Space => new_package.hard_drop = true,
                 C | LShift | RShift => new_package.store = true,
 
-                _ => panic!("should not have reached the input matching expression with an unregistered key")
+                _ => panic!(
+                    "should not have reached the input matching expression with an unregistered key"
+                ),
             }
         }
 
-        if new_package.hard_drop{
+        if new_package.hard_drop {
             new_package.move_x = 0;
         }
 
