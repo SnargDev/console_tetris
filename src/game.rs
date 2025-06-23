@@ -88,9 +88,11 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
 
             //LR movement
             if package.move_x != 0{
-                p.x += package.move_x;
+                *p += (package.move_x, 0);
+                //p.x += package.move_x;
                 if !is_piece_valid(p, &field){
-                    p.x -= package.move_x;
+                    *p -= (package.move_x, 0);
+                    //p.x -= package.move_x;
                 } else {
                     screen_changed = true;
                 }
@@ -164,7 +166,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool){
             for y in 0..sy{
                 for x in 0..sx{
                     if p.matrix[[y,x]] != Block::None{
-
                         assert_ne!(field[[(y as i16 + p.y) as usize, (x as i16 + p.x) as usize]], Block::None);
                         field[[(y as i16 + p.y) as usize, (x as i16 + p.x) as usize]] = Block::None;
                     } 
@@ -353,14 +354,13 @@ fn perform_rotation(piece: &mut Piece, field: &ArrayBase<OwnedRepr<Block>, Dim<[
         //if the only condition is for the fail count to <= prev then a piece could force itself through other blocks
 
         //up, down, right, left
-        let adds = [(-1,0), (1,0), (0,1), (0,-1)];
+        let adds = [(0,-1), (0,1), (1,0), (-1,0)];
 
         let mut fails = init_fails;
 
         for add in adds{
             while fails > 0 {
-                piece.y += add.0;
-                piece.x += add.1;
+                *piece += add;
 
                 let (ok, f) = fits_fail_limit(piece, &field, fails);
                 //apparently you could just do let (ok, fails) = ... but that doesnt work here? like it just shadows fails

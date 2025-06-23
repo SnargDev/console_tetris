@@ -111,3 +111,31 @@ impl Piece{
         }
     }
 }
+
+impl std::ops::Add<(i16, i16)> for Piece{
+    type Output = (i16, i16);
+    fn add(self, rhs: (i16, i16)) -> Self::Output {
+        (self.x + rhs.0, self.y + rhs.1)
+    }
+}
+
+impl std::ops::AddAssign<(i16, i16)> for Piece{
+    fn add_assign(&mut self, rhs: (i16, i16)) {
+        self.x += rhs.0;
+        self.y += rhs.1;
+    }
+}
+
+impl std::ops::Sub<(i16, i16)> for Piece{
+    type Output = (i16, i16);
+    fn sub(self, rhs: (i16, i16)) -> Self::Output {
+        (self.x - rhs.0, self.y - rhs.1)
+    }
+}
+
+impl std::ops::SubAssign<(i16, i16)> for Piece{
+    fn sub_assign(&mut self, rhs: (i16, i16)) {
+        self.x -= rhs.0;
+        self.y -= rhs.1;
+    }
+}
