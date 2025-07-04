@@ -17,6 +17,7 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 
 fn main() {
+    //TODO: remove this, use TermFeatures::has_color instead
     println!("Use color?");
     let use_color = get_yn_inp();
 

@@ -2,18 +2,44 @@ use crate::Block;
 use crate::Piece;
 use ndarray::Array;
 use ndarray::prelude::*;
+use std::io::Stdout;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use crate::input::InputPackage;
 use std::sync::{Arc, Mutex};
 
+use crossterm::{ExecutableCommand, QueueableCommand, cursor, terminal};
+use std::io::{Write, stdout};
+
+use crossterm::style;
+use style::Stylize;
+
 const FPS: u64 = 30;
 const FRAME_TIME: Duration = Duration::from_millis(1000 / FPS);
 
-const RENDER_LINES: usize = 22;
+const RENDER_LINES: u8 = 22;
+
+const FIELD_SIZE_X: u8 = 10;
+const FIELD_SIZE_Y: u8 = 40;
+//the index of the first row in field that is supposed to be rendered.
+const RENDER_ORIGIN: u8 = (FIELD_SIZE_Y - RENDER_LINES) + 2;
 
 pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
+    //initialize out, hide cursor, clear everything
+    let mut out = stdout();
+    out.execute(cursor::Hide).unwrap();
+    out.queue(terminal::Clear(terminal::ClearType::FromCursorUp))
+        .unwrap();
+    out.queue(terminal::Clear(terminal::ClearType::FromCursorDown))
+        .unwrap();
+
+    print!(
+        "{}{}",
+        format!("|{}|\n", "[]".repeat(FIELD_SIZE_X.into())).repeat(RENDER_LINES.into()),
+        format!("+{}+", "-".repeat(2 * FIELD_SIZE_X as usize))
+    );
+
     let spawn_x = 3;
     let spawn_y = 20;
 
@@ -24,9 +50,10 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
     //also this lets me set it to none once dropped, making the rest of the loop a little simpler
     let mut piece: Option<Piece> = None;
 
-    let size_x = 10;
-    let size_y = 40;
-    let mut field = Array::<Block, _>::from_elem((size_y, size_x).f(), Block::None);
+    let mut field = Array::<Block, _>::from_elem(
+        (FIELD_SIZE_Y as usize, FIELD_SIZE_X as usize).f(),
+        Block::None,
+    );
 
     let mut last_frame = Instant::now();
 
@@ -44,8 +71,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
     let mut bag: Vec<Block> = vec![];
 
     loop {
-        let mut screen_changed = false;
-
         let package = {
             let mut mutex = package_access.lock().unwrap();
             let new_package = mutex.clone();
@@ -67,30 +92,28 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 }
 
                 just_stored = true;
-                screen_changed = true;
             }
         }
 
         //piece movement
         if let Some(ref mut p) = piece {
+            //old matrix and position data to used to clear previously occupied tiles
+            let old = p.clone();
+
             //isolating this cause its a little longer
-            screen_changed |= perform_rotation(p, &field, package.rotate);
+            let rotated = perform_rotation(p, &field, package.rotate);
 
             //LR movement
             if package.move_x != 0 {
                 *p += (package.move_x, 0);
                 if !is_piece_valid(p, &field) {
                     *p -= (package.move_x, 0);
-                } else {
-                    screen_changed = true;
                 }
             }
 
             let mut dropped = false;
 
             if package.hard_drop || ticks_since_grav_update >= ticks_per_grav_update {
-                screen_changed = true;
-
                 ticks_since_grav_update = ticks_since_grav_update
                     .checked_sub(ticks_per_grav_update)
                     .or_else(|| Some(0))
@@ -99,7 +122,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 //falling
                 let mut grav = 1;
                 if package.hard_drop {
-                    grav = size_y;
+                    grav = FIELD_SIZE_Y;
                 }
 
                 for _ in 0..grav {
@@ -115,9 +138,64 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
 
             ticks_since_grav_update += if package.soft_drop { 4 } else { 1 };
 
+            //todo!("This doesnt work.");
+            if *p != old {
+                let matrix_x = p.matrix.dim().1;
+
+                //remove old blocks from the screen
+                for (i, _) in old
+                    .matrix
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, b)| **b == Block::None)
+                {
+                    let x = i % matrix_x;
+                    let y = (i - x) / matrix_x;
+
+                    /*
+                    //x2 cause 1 block == [] and because there is a pipe symbol at the start of the line
+                    let x = (p.x + x as i16) * 2 + 1;
+                    let y = p.y + y as i16 + 2;
+
+                    out.queue(cursor::MoveTo(x as u16, y as u16))
+                        .expect("Should have been able to move the cursor.");
+                    out.write("  ".as_bytes())
+                        .expect("Should have been able to write to the buffer.");
+                    */
+                }
+
+                //put new matrix on the screen
+                for (i, b) in p
+                    .matrix
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, b)| **b != Block::None)
+                {
+                    let x = i % matrix_x;
+                    let y = (i - x) / matrix_x;
+
+                    //*2 cause 1 block == [] and because there is a pipe symbol at the start of the line
+                    let x = (p.x + x as i16) * 2 + 1;
+                    let y = p.y + y as i16 + 2;
+
+                    out.queue(cursor::MoveTo(x as u16, y as u16))
+                        .expect("Should have been able to move the cursor.")
+                        .queue(style::PrintStyledContent(b.as_styled_comment()))
+                        .expect("Should have been able to write to the buffer.");
+                }
+
+                //REAL
+                //render_lines(vec![(p.y - 1).try_into().unwrap()], &field, &mut out);
+
+                out.flush().expect("Should have been able to flush.");
+            }
+
             let matrix_x = p.matrix.dim().1;
 
             //put piece on the matrix
+            //then look if there are any cleared lines
+            //then removed the piece again
+            //passing piece to handle_line_clears instead of adding and removing it from map would be much better
             for (i, b) in p
                 .matrix
                 .iter()
@@ -134,9 +212,9 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 piece = None;
                 just_stored = false;
 
-                score += handle_line_clears(&mut field, &mut cleared_lines) as u128;
-                if cleared_lines >= 10 {
-                    cleared_lines -= 10;
+                score += handle_line_clears(&mut field, &mut cleared_lines, &mut out) as u128;
+                if cleared_lines >= FIELD_SIZE_X as i32 {
+                    cleared_lines -= FIELD_SIZE_X as i32;
                     lvl += 1;
 
                     if lvl % 5 == 0 {
@@ -146,20 +224,18 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
             }
         }
 
-        if screen_changed {
-            render(&field, score, lvl, &stored, &mut render_size, use_color);
-        }
-
         if let Some(ref p) = piece {
             let (sy, sx) = p.matrix.dim();
 
             for y in 0..sy {
                 for x in 0..sx {
-                    if p.matrix[[y, x]] != Block::None {
+                    let b = p.matrix[[y, x]];
+                    if b != Block::None {
                         assert_ne!(
                             field[[(y as i16 + p.y) as usize, (x as i16 + p.x) as usize]],
                             Block::None
                         );
+
                         field[[(y as i16 + p.y) as usize, (x as i16 + p.x) as usize]] = Block::None;
                     }
                 }
@@ -181,9 +257,9 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 print!("{}[2J", 27 as char);
                 let s = format!(
                     "{}{}{}",
-                    " ".repeat(size_x / 2),
+                    " ".repeat(FIELD_SIZE_X as usize / 2),
                     format!("YOU LOST. SCORE: {}", score),
-                    " ".repeat(size_x / 2)
+                    " ".repeat(FIELD_SIZE_X as usize / 2)
                 );
                 if use_color {
                     println!("{}", colored::Colorize::red(s.as_str()));
@@ -250,12 +326,16 @@ fn render(
 
     for (i, b) in field
         .iter()
-        .skip((size_y - RENDER_LINES) * size_x)
+        .skip((size_y - RENDER_LINES as usize) * size_x)
         .enumerate()
     {
         out += &b.get_string_rep(use_color);
-        if (i + 1) % 10 == 0 {
-            out += if i > 10 { "|\n|" } else { "\n|" };
+        if (i + 1) % FIELD_SIZE_X as usize == 0 {
+            out += if i > FIELD_SIZE_X as usize {
+                "|\n|"
+            } else {
+                "\n|"
+            };
         }
     }
     out.pop();
@@ -267,9 +347,10 @@ fn render(
     }
 
     //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
-    let clear = format!("{}[2J", 27 as char);
+    //let clear = format!("{}[2J", 27 as char);
 
-    println!("{}{}", clear, out);
+    //println!("{}{}", clear, out);
+    println!("{}", out);
 
     println!("\nStorage:");
     if stored.is_some() {
@@ -412,6 +493,7 @@ fn perform_rotation(
 fn handle_line_clears(
     field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
     cleared_lines: &mut i32,
+    out: &mut std::io::Stdout,
 ) -> u32 {
     //turns out just swapping 2 rows in an ndarray is actually pretty complicated.
     //i tried using mem::swap but that requires 2 &mut to the rows, which violates
@@ -444,6 +526,11 @@ fn handle_line_clears(
         for j in 0..row.len() {
             row[j] = Block::None;
         }
+
+        //empty the row on the screen
+        //out.queue(cursor::MoveTo(1, *i as u16 + 2))
+        //    .expect("Should have been able to move cursor.");
+        //out.write(("[]".repeat(10) + "|").as_bytes());
     }
 
     if !cleared.is_empty() {
@@ -452,7 +539,9 @@ fn handle_line_clears(
         let mut new_rows = new_field.rows_mut().into_iter().rev();
         let mut new_row = new_rows.next().unwrap();
 
-        for row in field.rows().into_iter().rev() {
+        let mut changed: Vec<u8> = vec![];
+
+        for (y, row) in field.rows().into_iter().enumerate().rev() {
             let mut advance = false;
 
             for (i, b) in row.iter().enumerate() {
@@ -461,6 +550,7 @@ fn handle_line_clears(
                 }
 
                 new_row[i] = *b;
+                changed.push(y as u8);
             }
 
             //if there are only 'None' blocks in the old row then the new row should not change -> blocks sink to the bottom
@@ -470,8 +560,97 @@ fn handle_line_clears(
         }
 
         *field = new_field;
+
+        //rerender all rows that have changed
+        todo!("Make sure that only rows that are supposed to be rendered end up here.");
+        for y in &changed {
+            let y = *y as u16;
+            out.queue(cursor::MoveTo(0, y + 2))
+                .expect("Should have been able to move cursor.");
+            out.queue(terminal::Clear(terminal::ClearType::CurrentLine))
+                .expect("Should have been able to clear line.");
+            out.write("|".as_bytes())
+                .expect("Should have been able to write to buffer.");
+
+            for x in 0..FIELD_SIZE_X {
+                let b = field[[y as usize, x as usize]];
+                out.write(if b == Block::None { "  " } else { "[]" }.as_bytes())
+                    .expect("Should have been able to write to buffer.");
+            }
+
+            out.write("|".as_bytes())
+                .expect("Should have been able to write to buffer.");
+        }
+
+        if changed.len() > 0 {
+            out.flush().expect("Should have been able to flush.");
+        }
+
+        /*for row in field.rows().into_iter().enumerate().filter(|(i,_)| cleared.contains(i))
+        {
+            for b in row{
+                out.write(b.)
+            }
+        }
+        for row in field.row(y.into()){
+            for b in row{
+                out.write(b.)
+            }
+
+        }*/
     }
+
+    /*for y in cleared.iter() {
+        out.queue(cursor::MoveTo(0, *y as u16 + 2))
+            .expect("Should have been able to move the cursor.");
+        out.queue(terminal::Clear(terminal::ClearType::CurrentLine))
+            .expect("Should have been able to clear line.");
+
+        let s: Vec<crossterm::style::StyledContent<&str>> = field
+            .row(*y)
+            .iter()
+            .map(|b| b.as_styled_comment())
+            .collect();
+
+        todo!();
+        //let mut line = "|".to_string();
+        //for c in s {
+        //    line += "s";
+        //}
+
+        //stringify line from field
+        for i in 0..10 {}
+    }*/
 
     *cleared_lines += cleared.len() as i32;
     score
+}
+
+fn render_lines(
+    lines: Vec<u8>,
+    field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
+    out: &mut Stdout,
+) {
+    for l in lines {
+        let y = (l - RENDER_ORIGIN) + 2;
+
+        out.queue(cursor::MoveTo(0, y.into()))
+            .expect("Should have been able to move cursor.");
+        out.queue(terminal::Clear(terminal::ClearType::CurrentLine))
+            .expect("Should have been able to clear terminal.");
+
+        for x in 0..FIELD_SIZE_X {
+            out.write(
+                if field[[y as usize, x as usize]] == Block::None {
+                    "  "
+                } else {
+                    "[]"
+                }
+                .as_bytes(),
+            )
+            .expect("Should have been able to write to buffer.");
+        }
+
+        out.flush().expect("Should have been able to flush.");
+    }
 }

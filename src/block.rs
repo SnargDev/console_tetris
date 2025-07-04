@@ -1,5 +1,3 @@
-use colored::Colorize;
-
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Block {
     LightBlue,
@@ -36,6 +34,7 @@ impl Block {
     pub fn get_string_rep(&self, use_color: bool) -> String {
         if use_color {
             use Block::*;
+            use colored::Colorize;
             format!(
                 "{}",
                 match self {
@@ -52,6 +51,21 @@ impl Block {
             )
         } else {
             String::from(if *self == Block::None { "  " } else { "[]" })
+        }
+    }
+
+    pub fn as_styled_comment(&self) -> crossterm::style::StyledContent<&str> {
+        use Block::*;
+        use crossterm::style::Stylize;
+        match *self {
+            LightBlue => "[]".cyan(),
+            DarkBlue => "[]".blue(),
+            Orange => "[]".yellow(),
+            Yellow => "[]".dark_yellow(),
+            Green => "[]".green(),
+            Red => "[]".red(),
+            Magenta => "[]".magenta(),
+            None => "  ".black(),
         }
     }
 }

@@ -4,6 +4,7 @@ use ndarray::prelude::*;
 
 use crate::input::Rotation;
 
+#[derive(Clone)]
 pub struct Piece {
     pub matrix: Array2<Block>,
     pub x: i16,
@@ -129,6 +130,13 @@ impl Piece {
             ),
         }
     }
+
+    /*pub fn clone(self) -> Piece {
+        Piece {
+            matrix: self.matrix.clone(),
+            ..self
+        }
+    }*/
 }
 
 impl std::ops::Add<(i16, i16)> for Piece {
@@ -164,5 +172,11 @@ impl std::ops::SubAssign<(i16, i16)> for Piece {
     fn sub_assign(&mut self, rhs: (i16, i16)) {
         self.x -= rhs.0;
         self.y -= rhs.1;
+    }
+}
+
+impl PartialEq for Piece {
+    fn eq(&self, other: &Self) -> bool {
+        self.matrix == other.matrix && self.x == other.x && self.y == other.y
     }
 }
