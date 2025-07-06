@@ -131,12 +131,19 @@ impl Piece {
         }
     }
 
-    /*pub fn clone(self) -> Piece {
-        Piece {
-            matrix: self.matrix.clone(),
-            ..self
+    pub fn block_at(&self, x: u8, y: u8) -> Block {
+        let (my, mx) = self.matrix.dim();
+
+        if x < self.x as u8
+            || x >= self.x as u8 + mx as u8
+            || y < self.y as u8
+            || y >= self.y as u8 + my as u8
+        {
+            Block::None
+        } else {
+            self.matrix[[(y - self.y as u8) as usize, (x - self.x as u8) as usize]]
         }
-    }*/
+    }
 }
 
 impl std::ops::Add<(i16, i16)> for Piece {

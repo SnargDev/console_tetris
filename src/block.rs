@@ -54,7 +54,7 @@ impl Block {
         }
     }
 
-    pub fn as_styled_comment(&self) -> crossterm::style::StyledContent<&str> {
+    pub fn get_string_rep_colored(&self) -> String {
         use Block::*;
         use crossterm::style::Stylize;
         match *self {
@@ -67,5 +67,6 @@ impl Block {
             Magenta => "[]".magenta(),
             None => "  ".black(),
         }
+        .to_string()
     }
 }

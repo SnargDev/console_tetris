@@ -25,6 +25,36 @@ const FIELD_SIZE_Y: u8 = 40;
 //the index of the first row in field that is supposed to be rendered.
 const RENDER_ORIGIN: u8 = (FIELD_SIZE_Y - RENDER_LINES) + 2;
 
+/*
+When does the screen have to be updated?
+
+Game:
+    piece moved left or right
+    piece affected by gravity
+        is soft drop held?
+    piece hard dropped
+    piece rotated
+    lines cleared
+
+UI:
+    score changed
+    level changed
+    stored piece changed
+
+
+===========================
+How should lines be updated?
+
+Option 1:
+    everything flushed immediately
+    may produce flickering idk
+
+Option 2:
+    array of strings
+    if anything has changed, iterate over all non-empty lines and buffer their text
+
+ */
+
 pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
     //initialize out, hide cursor, clear everything
     let mut out = stdout();
@@ -43,8 +73,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
     let spawn_x = 3;
     let spawn_y = 20;
 
-    let mut render_size: usize = 0;
-
     //option because there should be an update inbetween placing a piece and spawning the next one.
     //otherwise the player could maybe hard drop onto blocks that are being cleared that turn
     //also this lets me set it to none once dropped, making the rest of the loop a little simpler
@@ -62,7 +90,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
 
     let mut score: u128 = 0;
 
-    let mut cleared_lines = 0;
+    let mut clear_count = 0;
     let mut lvl: u128 = 0;
 
     let mut ticks_per_grav_update: u16 = 10;
@@ -79,6 +107,15 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
             new_package
         };
 
+        let mut redraw = false;
+
+        //0 is the old y level
+        //1 is the height of the old matrix
+        let old_stats: Option<(u8, u8)> = match piece {
+            Some(ref p) => Some((p.y as u8, p.matrix.dim().0 as u8)),
+            None => None,
+        };
+
         //2 ifs because thats how if let works ig
         if let Some(ref mut p) = piece {
             if package.store && !just_stored {
@@ -92,22 +129,21 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 }
 
                 just_stored = true;
+                redraw = true;
             }
         }
 
         //piece movement
         if let Some(ref mut p) = piece {
-            //old matrix and position data to used to clear previously occupied tiles
-            let old = p.clone();
-
-            //isolating this cause its a little longer
-            let rotated = perform_rotation(p, &field, package.rotate);
+            redraw |= perform_rotation(p, &field, package.rotate);
 
             //LR movement
             if package.move_x != 0 {
                 *p += (package.move_x, 0);
                 if !is_piece_valid(p, &field) {
                     *p -= (package.move_x, 0);
+                } else {
+                    redraw = true;
                 }
             }
 
@@ -120,11 +156,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                     .unwrap();
 
                 //falling
-                let mut grav = 1;
-                if package.hard_drop {
-                    grav = FIELD_SIZE_Y;
-                }
-
+                let grav = if package.hard_drop { FIELD_SIZE_Y } else { 1 };
                 for _ in 0..grav {
                     p.y += 1;
 
@@ -134,12 +166,13 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                         p.y -= 1;
                     }
                 }
+
+                redraw = true;
             }
 
             ticks_since_grav_update += if package.soft_drop { 4 } else { 1 };
 
-            //todo!("This doesnt work.");
-            if *p != old {
+            /*if *p != old {
                 let matrix_x = p.matrix.dim().1;
 
                 //remove old blocks from the screen
@@ -174,13 +207,14 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                     let x = i % matrix_x;
                     let y = (i - x) / matrix_x;
 
-                    //*2 cause 1 block == [] and because there is a pipe symbol at the start of the line
+                    //x2 cause 1 block == [] and because there is a pipe symbol at the start of the line
                     let x = (p.x + x as i16) * 2 + 1;
                     let y = p.y + y as i16 + 2;
 
                     out.queue(cursor::MoveTo(x as u16, y as u16))
                         .expect("Should have been able to move the cursor.")
-                        .queue(style::PrintStyledContent(b.as_styled_comment()))
+                        .write(b.get_string_rep_colored().as_bytes())
+                        //.queue(style::PrintStyledContent(b.as_styled_comment()))
                         .expect("Should have been able to write to the buffer.");
                 }
 
@@ -188,14 +222,18 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 //render_lines(vec![(p.y - 1).try_into().unwrap()], &field, &mut out);
 
                 out.flush().expect("Should have been able to flush.");
-            }
+            } else {
+                println!("Nothing changed, this is supposed to happen sometimes.");
+                return;
+            }*/
 
             let matrix_x = p.matrix.dim().1;
 
             //put piece on the matrix
-            //then look if there are any cleared lines
-            //then removed the piece again
-            //passing piece to handle_line_clears instead of adding and removing it from map would be much better
+            //then check for line clears
+            //then redraw the screen if redraw is true
+            //then removed the piece again if it wasn't dropped
+            //the game should ideally only check do after a gravity update
             for (i, b) in p
                 .matrix
                 .iter()
@@ -212,18 +250,49 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 piece = None;
                 just_stored = false;
 
-                score += handle_line_clears(&mut field, &mut cleared_lines, &mut out) as u128;
-                if cleared_lines >= FIELD_SIZE_X as i32 {
-                    cleared_lines -= FIELD_SIZE_X as i32;
+                let cleared = handle_line_clears(&mut field);
+                clear_count += cleared.len() as i32;
+                score += get_score_for_lines(cleared.len() as u8);
+                //redraw |= !cleared.is_empty();
+
+                //update level
+                if clear_count >= 10 as i32 {
+                    clear_count -= 10 as i32;
                     lvl += 1;
 
                     if lvl % 5 == 0 {
                         ticks_per_grav_update = std::cmp::max(1, lvl as u16 - 1);
                     }
                 }
+
+                if !cleared.is_empty() {
+                    let lines: Vec<u8> = (0..FIELD_SIZE_Y).collect();
+                    render_lines(&lines, &field, &mut out);
+                    //this is temporary. since we redraw the whole field after lines are cleared, we dont need to redraw anything else later on.
+                    redraw = false;
+                }
+
+                //nah
+                if redraw {
+                    /*
+                       for all lines the old piece covered and that are not covered by the current piece
+                           redraw
+
+                       for all lines that were cleared and that are not covered by the current piece
+                           redraw
+
+                       for all lines covered by the current piece
+                           redraw
+                    */
+
+                    /*for (y in old_y..old_y + old_my).filter(y < p.y || y > p.y + my) //all lines not inside
+                        redraw line
+                    */
+                }
             }
         }
 
+        //remove piece from the matrix
         if let Some(ref p) = piece {
             let (sy, sx) = p.matrix.dim();
 
@@ -254,21 +323,59 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
             let p = Piece::new(bag.remove(random), spawn_x, spawn_y);
 
             if !is_piece_valid(&p, &field) {
-                print!("{}[2J", 27 as char);
+                //fixme: ununwrap
+                out.queue(terminal::Clear(terminal::ClearType::FromCursorDown))
+                    .unwrap();
+                out.queue(terminal::Clear(terminal::ClearType::FromCursorUp))
+                    .unwrap();
+                out.flush().unwrap();
+
                 let s = format!(
                     "{}{}{}",
                     " ".repeat(FIELD_SIZE_X as usize / 2),
-                    format!("YOU LOST. SCORE: {}", score),
+                    format!("Game over. Score: {}", score),
                     " ".repeat(FIELD_SIZE_X as usize / 2)
                 );
-                if use_color {
-                    println!("{}", colored::Colorize::red(s.as_str()));
-                } else {
-                    println!("{}", s);
-                }
+
+                println!("{}", s.red());
                 return;
             }
             piece = Some(p);
+        }
+
+        if redraw {
+            /*
+            1. if there WAS a piece:
+                draw all lines of the matrix for the old position until you reach the position of the current piece, if it exists
+
+            2. if there IS a piece:
+                draw all lines of the matrix of the current piece
+
+            3. else (for 2) for all lines that were cleared and do not overlap with the (old?) matrix of the piece, redraw them
+                FOR NOW: if any lines have been cleared, redraw everything.
+             */
+
+            //1
+            if let Some((old_y, old_height)) = old_stats {
+                let lines: Vec<u8> = if let Some(ref p) = piece {
+                    let height = p.matrix.dim().0;
+                    (old_y..old_y + old_height)
+                        .filter(|y| *y < p.y as u8 || *y > p.y as u8 + height as u8)
+                        .collect()
+                } else {
+                    (old_y..old_y + old_height).collect()
+                };
+
+                buffer_multi_line_render(&lines, &field, &mut out);
+            }
+
+            //2
+            if let Some(ref p) = piece {
+                let lines: Vec<u8> = (p.y as u8..p.y as u8 + p.matrix.dim().0 as u8).collect();
+                buffer_multi_line_render(&lines, &field, &mut out);
+            }
+
+            //todo!("Implement redrawing");
         }
 
         let time = Instant::now();
@@ -279,86 +386,6 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
         }
 
         last_frame = Instant::now();
-    }
-}
-
-fn render(
-    field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
-    score: u128,
-    lvl: u128,
-    stored: &Option<Array2<Block>>,
-    render_size: &mut usize,
-    use_color: bool,
-) {
-    let mut out = String::with_capacity(*render_size);
-
-    let (size_y, size_x) = field.dim();
-
-    out += &format!("Score: {}", score);
-    out += &" ".repeat(19 - out.len());
-    out += "\n";
-
-    out += &format!("Level: {}", lvl);
-    out += &" ".repeat(39 - out.len());
-    out += "\n";
-
-    let line = &format!("+{}+", &"-".repeat(size_x * 2));
-    out += line;
-
-    let storage_display: Vec<String> = if let Some(held) = stored {
-        let mut s: Vec<String> = vec![];
-        for row in held.rows().into_iter() {
-            let mut r = String::with_capacity(35);
-            for b in row {
-                r += &b.get_string_rep(use_color);
-            }
-
-            s.push(r);
-        }
-
-        s
-    } else {
-        vec!["None", "", "", ""]
-            .iter()
-            .map(|s| String::from(*s))
-            .collect()
-    };
-
-    for (i, b) in field
-        .iter()
-        .skip((size_y - RENDER_LINES as usize) * size_x)
-        .enumerate()
-    {
-        out += &b.get_string_rep(use_color);
-        if (i + 1) % FIELD_SIZE_X as usize == 0 {
-            out += if i > FIELD_SIZE_X as usize {
-                "|\n|"
-            } else {
-                "\n|"
-            };
-        }
-    }
-    out.pop();
-
-    out += line;
-
-    if out.len() != *render_size {
-        *render_size = out.len();
-    }
-
-    //this seemingly just fills up the screen with invisible chars, which is good enough i guess but i dont like it
-    //let clear = format!("{}[2J", 27 as char);
-
-    //println!("{}{}", clear, out);
-    println!("{}", out);
-
-    println!("\nStorage:");
-    if stored.is_some() {
-        for s in storage_display {
-            println!("{}", s);
-        }
-    } else {
-        println!("Empty")
     }
 }
 
@@ -490,15 +517,14 @@ fn perform_rotation(
     return true;
 }
 
-fn handle_line_clears(
-    field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
-    cleared_lines: &mut i32,
-    out: &mut std::io::Stdout,
-) -> u32 {
+//returns a vec instead of &[u8] because that demands lifetime annotations even though nothing is directly taken from the parameters and still doesnt work
+fn handle_line_clears(field: &mut ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>) -> Vec<usize> {
     //turns out just swapping 2 rows in an ndarray is actually pretty complicated.
     //i tried using mem::swap but that requires 2 &mut to the rows, which violates
     //borrowing rules. instead i just decided to copy the entire thing if needed.
     //rust is fast and its just enum values and not strings. also it rarely happens
+
+    let mut changed: Vec<usize> = vec![];
 
     let cleared: Vec<usize> = field
         .rows()
@@ -510,27 +536,12 @@ fn handle_line_clears(
         .map(|(i, _)| i)
         .collect();
 
-    let score = match cleared.len() {
-        0 => 0,
-        1 => 40,
-        2 => 100,
-        3 => 300,
-        4 => 1200,
-
-        _ => panic!("Cannot clear more than 4 rows in one turn"),
-    };
-
     //fill cleared lines with Block::None
     for i in &cleared {
         let mut row = field.row_mut(*i);
         for j in 0..row.len() {
             row[j] = Block::None;
         }
-
-        //empty the row on the screen
-        //out.queue(cursor::MoveTo(1, *i as u16 + 2))
-        //    .expect("Should have been able to move cursor.");
-        //out.write(("[]".repeat(10) + "|").as_bytes());
     }
 
     if !cleared.is_empty() {
@@ -539,7 +550,8 @@ fn handle_line_clears(
         let mut new_rows = new_field.rows_mut().into_iter().rev();
         let mut new_row = new_rows.next().unwrap();
 
-        let mut changed: Vec<u8> = vec![];
+        //let mut first = -1;
+        //let mut last = -1;
 
         for (y, row) in field.rows().into_iter().enumerate().rev() {
             let mut advance = false;
@@ -550,83 +562,38 @@ fn handle_line_clears(
                 }
 
                 new_row[i] = *b;
-                changed.push(y as u8);
             }
 
             //if there are only 'None' blocks in the old row then the new row should not change -> blocks sink to the bottom
             if advance {
                 new_row = new_rows.next().unwrap();
+
+                //FIXME
+                //maybe this is correct? idk
+                changed.push(y);
             }
         }
 
         *field = new_field;
-
-        //rerender all rows that have changed
-        todo!("Make sure that only rows that are supposed to be rendered end up here.");
-        for y in &changed {
-            let y = *y as u16;
-            out.queue(cursor::MoveTo(0, y + 2))
-                .expect("Should have been able to move cursor.");
-            out.queue(terminal::Clear(terminal::ClearType::CurrentLine))
-                .expect("Should have been able to clear line.");
-            out.write("|".as_bytes())
-                .expect("Should have been able to write to buffer.");
-
-            for x in 0..FIELD_SIZE_X {
-                let b = field[[y as usize, x as usize]];
-                out.write(if b == Block::None { "  " } else { "[]" }.as_bytes())
-                    .expect("Should have been able to write to buffer.");
-            }
-
-            out.write("|".as_bytes())
-                .expect("Should have been able to write to buffer.");
-        }
-
-        if changed.len() > 0 {
-            out.flush().expect("Should have been able to flush.");
-        }
-
-        /*for row in field.rows().into_iter().enumerate().filter(|(i,_)| cleared.contains(i))
-        {
-            for b in row{
-                out.write(b.)
-            }
-        }
-        for row in field.row(y.into()){
-            for b in row{
-                out.write(b.)
-            }
-
-        }*/
     }
 
-    /*for y in cleared.iter() {
-        out.queue(cursor::MoveTo(0, *y as u16 + 2))
-            .expect("Should have been able to move the cursor.");
-        out.queue(terminal::Clear(terminal::ClearType::CurrentLine))
-            .expect("Should have been able to clear line.");
-
-        let s: Vec<crossterm::style::StyledContent<&str>> = field
-            .row(*y)
-            .iter()
-            .map(|b| b.as_styled_comment())
-            .collect();
-
-        todo!();
-        //let mut line = "|".to_string();
-        //for c in s {
-        //    line += "s";
-        //}
-
-        //stringify line from field
-        for i in 0..10 {}
-    }*/
-
-    *cleared_lines += cleared.len() as i32;
-    score
+    return changed;
 }
 
-fn render_lines(
+fn get_score_for_lines(lines: u8) -> u128 {
+    //this does not account for that minor point bonus you get depending on what height you dropped a piece on but it really doesnt matter because of how small that bonus is
+    match lines {
+        0 => 0,
+        1 => 40,
+        2 => 100,
+        3 => 300,
+        4 => 1200,
+
+        _ => panic!("Cannot clear more than 4 rows in one turn"),
+    }
+}
+
+/*fn render_lines(
     lines: Vec<u8>,
     field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
     out: &mut Stdout,
@@ -653,4 +620,141 @@ fn render_lines(
 
         out.flush().expect("Should have been able to flush.");
     }
+}*/
+
+fn buffer_line_render(
+    y: u8,
+    field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
+    out: &mut Stdout,
+) {
+    println!("Line render!!!!!");
+    println!("y: {}", y);
+
+    out.queue(cursor::MoveTo(0, (y + RENDER_ORIGIN) as u16))
+        .expect("Should have been able to move cursor.")
+        .queue(terminal::Clear(terminal::ClearType::CurrentLine))
+        .expect("Should have been able to clear line,");
+
+    let mut bytes = vec![];
+    //is this how you do this?
+    bytes.append(&mut "|".as_bytes().to_vec());
+
+    for b in field.row(y as usize) {
+        bytes.append(&mut b.get_string_rep_colored().as_bytes().to_vec());
+    }
+
+    bytes.append(&mut "|".as_bytes().to_vec());
+
+    out.write(&bytes)
+        .expect("Should have been able to write bytes to buffer.");
+}
+
+fn buffer_multi_line_render(
+    lines: &[u8],
+    field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
+    out: &mut Stdout,
+) {
+    for y in lines {
+        buffer_line_render(*y, field, out);
+    }
+}
+
+fn render_lines(
+    lines: &[u8],
+    field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
+    out: &mut Stdout,
+) {
+    buffer_multi_line_render(lines, field, out);
+    out.flush().expect("Should have been able to flush buffer.");
+}
+
+fn testing_bs(mut out: Stdout) {
+    //testing code for colored printing
+    sleep(Duration::from_secs(2));
+    out.queue(cursor::MoveTo(0, 15)).unwrap();
+    out.queue(terminal::Clear(terminal::ClearType::CurrentLine))
+        .unwrap();
+
+    let line = format!(
+        "|{}|",
+        Block::DarkBlue
+            .get_string_rep_colored()
+            .repeat(FIELD_SIZE_X.into())
+    );
+
+    out.write(line.as_bytes()).unwrap();
+    out.flush().unwrap();
+
+    //
+
+    out.queue(cursor::MoveTo(0, 15)).unwrap();
+    out.queue(terminal::Clear(terminal::ClearType::CurrentLine))
+        .unwrap();
+
+    let mut line = format!(
+        "|{}|",
+        Block::Red
+            .get_string_rep_colored()
+            .repeat(FIELD_SIZE_X.into())
+    );
+
+    out.write(line.as_bytes()).unwrap();
+    out.flush().unwrap();
+
+    out.queue(terminal::Clear(terminal::ClearType::CurrentLine))
+        .unwrap();
+
+    out.queue(cursor::MoveTo(0, 15)).unwrap();
+
+    let lower = 4;
+    let upper = 5;
+    //let mut vec: Vec<char> = Vec::with_capacity(FIELD_SIZE_X as usize * 2 + 2);
+
+    /*let new_line: String = line
+    .chars()
+    .enumerate()
+    .map(|(i, c)| {
+        if i >= lower && i <= upper {
+            if i % 2 == 0 { '[' } else { ']' }
+        } else {
+            c
+        }
+    })
+    .collect();*/
+
+    //THIS SEEMS TO BE CORRECT
+    //just replace the bounds check with 'if x is a valid position in p's matrix AND the block at that position is not none'
+    let mut vec: Vec<u8> = vec![b'|'];
+
+    for x in 0..FIELD_SIZE_X {
+        if x >= lower && x <= upper {
+            vec.extend_from_slice(Block::Yellow.get_string_rep_colored().as_bytes());
+        } else {
+            vec.push(b'[');
+            vec.push(b']');
+        }
+    }
+    vec.push(b'|');
+
+    out.write(&vec).unwrap();
+
+    //let new_line: String = vec.iter().collect();
+    //out.write(new_line.as_bytes()).unwrap();
+
+    /*for (i, char) in line.chars().enumerate() {
+        if (lower..upper).contains(&(i as u8)) {
+            let char: char = if i % 2 == 0 { '[' } else { ']' };
+            vec.push(char);
+            //out.write(char.to_string().as_bytes()).unwrap();
+        } else {
+            vec.push(char);
+            //out.write(char.to_string().as_bytes()).unwrap();
+        }
+    }*/
+
+    //let s: String = vec.iter().collect();
+    //out.write(s.as_bytes()).unwrap();
+
+    //print!("{}", Block::DarkBlue.as_styled_comment().to_string());
+    return;
 }

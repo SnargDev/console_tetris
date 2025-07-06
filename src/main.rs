@@ -18,8 +18,8 @@ use std::sync::{Arc, Mutex};
 
 fn main() {
     //TODO: remove this, use TermFeatures::has_color instead
-    println!("Use color?");
-    let use_color = get_yn_inp();
+    //println!("Use color?");
+    //let use_color = get_yn_inp();
 
     let package_access = Arc::new(Mutex::new(input::InputPackage::new()));
     let clone = package_access.clone();
@@ -27,7 +27,8 @@ fn main() {
     thread::spawn(move || input::activate(clone));
 
     loop {
-        game::run(package_access.clone(), use_color);
+        //fix up all this use color stuff
+        game::run(package_access.clone(), true); //use_color);
 
         println!("Play again? Y/N");
         if !get_yn_inp() {
