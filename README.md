@@ -1,1 +1,1 @@
-First rust project I've ever written. Controls are in controls.txt. If you are experiencing weird graphical issues with random chars everwhere your terminal doesn't support the special characters used. In that case play with colors disabled.
+First rust project I've ever written. Controls are in controls.txt.
