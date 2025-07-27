@@ -11,15 +11,34 @@ use piece::Piece;
 mod game;
 
 mod input;
+mod rendering;
 
-use std::thread;
+use std::{
+    io::{Write, stdout},
+    thread,
+};
 
+use crossterm::{QueueableCommand, cursor, terminal};
 use std::sync::{Arc, Mutex};
 
 fn main() {
-    //TODO: remove this, use TermFeatures::has_color instead
-    //println!("Use color?");
-    //let use_color = get_yn_inp();
+    let mut out = stdout();
+    out.queue(cursor::MoveTo(0, 0))
+        .expect("Should have been able to move cursor.")
+        .queue(terminal::Clear(terminal::ClearType::FromCursorUp))
+        .expect("Should have been able to clear.")
+        .queue(terminal::Clear(terminal::ClearType::FromCursorDown))
+        .expect("Should have been able to clear.")
+        .flush()
+        .expect("Should have been able to flush.");
+
+    //the terminal has to be maximized because seemingly only text visible on screen is flushed
+    println!("Maximize your terminal window. Then press enter.");
+
+    let mut discard = "".to_string();
+    std::io::stdin()
+        .read_line(&mut discard)
+        .expect("Failed to read line.");
 
     let package_access = Arc::new(Mutex::new(input::InputPackage::new()));
     let clone = package_access.clone();
@@ -27,8 +46,7 @@ fn main() {
     thread::spawn(move || input::activate(clone));
 
     loop {
-        //fix up all this use color stuff
-        game::run(package_access.clone(), true); //use_color);
+        game::run(package_access.clone(), &mut out);
 
         println!("Play again? Y/N");
         if !get_yn_inp() {

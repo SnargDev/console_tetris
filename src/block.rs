@@ -8,11 +8,11 @@ pub enum Block {
     Red,
     Magenta,
 
-    None,
+    Void,
 }
 
 impl Block {
-    ///All the values in Block except for None
+    ///All the values in Block except for Void
     pub const VALUES: [Self; 7] = [
         Block::LightBlue,
         Block::DarkBlue,
@@ -42,7 +42,7 @@ impl Block {
             Green => "[]".green(),
             Red => "[]".red(),
             Magenta => "[]".magenta(),
-            None => "  ".black(),
+            Void => " .".grey(),
         }
         .to_string()
     }
