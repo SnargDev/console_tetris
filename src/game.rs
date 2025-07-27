@@ -66,7 +66,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
 
     print!(
         "{}{}",
-        format!("|{}|\n", "[]".repeat(FIELD_SIZE_X.into())).repeat(RENDER_LINES.into()),
+        format!("|{}|\n", "  ".repeat(FIELD_SIZE_X.into())).repeat(RENDER_LINES.into()),
         format!("+{}+", "-".repeat(2 * FIELD_SIZE_X as usize))
     );
 
@@ -107,7 +107,8 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
             new_package
         };
 
-        let mut redraw = false;
+        //immediately redraw the screen
+        let mut redraw = true;
 
         //0 is the old y level
         //1 is the height of the old matrix
@@ -155,12 +156,21 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                     .or_else(|| Some(0))
                     .unwrap();
 
+                if package.hard_drop {
+                    print!("ah")
+                }
+
                 //falling
                 let grav = if package.hard_drop { FIELD_SIZE_Y } else { 1 };
                 for _ in 0..grav {
                     p.y += 1;
 
-                    dropped = !is_piece_valid(p, &field);
+                    if !is_piece_valid(p, &field) {
+                        dropped = true;
+                        p.y -= 1;
+                        break;
+                    }
+                    //dropped = !is_piece_valid(p, &field);
 
                     if dropped {
                         p.y -= 1;
@@ -266,14 +276,20 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 }
 
                 if !cleared.is_empty() {
-                    let lines: Vec<u8> = (0..FIELD_SIZE_Y).collect();
-                    render_lines(&lines, &field, &mut out);
+                    //let lines: Vec<u8> = (0..FIELD_SIZE_Y).collect();
+                    //render_lines(&lines, &field, &mut out);
                     //this is temporary. since we redraw the whole field after lines are cleared, we dont need to redraw anything else later on.
-                    redraw = false;
+                    //redraw = false;
+                    redraw = true;
                 }
 
                 //nah
                 if redraw {
+                    /*buffer_multi_line_render(
+                        &(0..FIELD_SIZE_Y).collect::<Vec<u8>>(),
+                        &field,
+                        &mut out,
+                    );*/
                     /*
                        for all lines the old piece covered and that are not covered by the current piece
                            redraw
@@ -289,6 +305,10 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                         redraw line
                     */
                 }
+            }
+
+            if redraw {
+                buffer_multi_line_render(&(0..FIELD_SIZE_Y).collect::<Vec<u8>>(), &field, &mut out);
             }
         }
 
@@ -340,10 +360,13 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 println!("{}", s.red());
                 return;
             }
+
             piece = Some(p);
         }
 
         if redraw {
+            //buffer_multi_line_render(&(0..FIELD_SIZE_Y).collect::<Vec<u8>>(), &field, &mut out);
+
             /*
             1. if there WAS a piece:
                 draw all lines of the matrix for the old position until you reach the position of the current piece, if it exists
@@ -356,7 +379,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
              */
 
             //1
-            if let Some((old_y, old_height)) = old_stats {
+            /*if let Some((old_y, old_height)) = old_stats {
                 let lines: Vec<u8> = if let Some(ref p) = piece {
                     let height = p.matrix.dim().0;
                     (old_y..old_y + old_height)
@@ -367,7 +390,7 @@ pub fn run(package_access: Arc<Mutex<InputPackage>>, use_color: bool) {
                 };
 
                 buffer_multi_line_render(&lines, &field, &mut out);
-            }
+            }*/
 
             //2
             if let Some(ref p) = piece {
@@ -627,10 +650,8 @@ fn buffer_line_render(
     field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
     out: &mut Stdout,
 ) {
-    println!("Line render!!!!!");
-    println!("y: {}", y);
-
-    out.queue(cursor::MoveTo(0, (y + RENDER_ORIGIN) as u16))
+    //out.queue(cursor::MoveTo(0, (y + RENDER_ORIGIN) as u16))
+    out.queue(cursor::MoveTo(0, y as u16))
         .expect("Should have been able to move cursor.")
         .queue(terminal::Clear(terminal::ClearType::CurrentLine))
         .expect("Should have been able to clear line,");
@@ -654,9 +675,15 @@ fn buffer_multi_line_render(
     field: &ArrayBase<OwnedRepr<Block>, Dim<[usize; 2]>>,
     out: &mut Stdout,
 ) {
+    //let mut v = vec![];
     for y in lines {
+        //v.push(y.to_string());
         buffer_line_render(*y, field, out);
     }
+    //println!();
+    //for s in v {
+    //print!("{}", s);
+    //}
 }
 
 fn render_lines(

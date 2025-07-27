@@ -31,29 +31,6 @@ impl std::fmt::Display for Block {
 }
 
 impl Block {
-    pub fn get_string_rep(&self, use_color: bool) -> String {
-        if use_color {
-            use Block::*;
-            use colored::Colorize;
-            format!(
-                "{}",
-                match self {
-                    LightBlue => Colorize::cyan("[]"),
-                    DarkBlue => Colorize::blue("[]"),
-                    Orange => Colorize::yellow("[]"),
-                    Yellow => Colorize::bright_yellow("[]"),
-                    Green => Colorize::green("[]"),
-                    Red => Colorize::red("[]"),
-                    Magenta => Colorize::magenta("[]"),
-
-                    _ => Colorize::black("  "),
-                }
-            )
-        } else {
-            String::from(if *self == Block::None { "  " } else { "[]" })
-        }
-    }
-
     pub fn get_string_rep_colored(&self) -> String {
         use Block::*;
         use crossterm::style::Stylize;
